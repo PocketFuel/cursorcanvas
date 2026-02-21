@@ -1,6 +1,6 @@
 /// <reference types="@figma/plugin-typings" />
 
-figma.showUI(__html__, { width: 420, height: 760, themeColors: true });
+figma.showUI(__html__, { width: 460, height: 820, themeColors: true });
 
 interface CommandMessage {
   type: "command";

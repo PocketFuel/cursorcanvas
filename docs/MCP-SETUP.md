@@ -25,9 +25,9 @@ There is a **project-level** config at `.cursor/mcp.json` in this repo.
   ```json
   {
     "mcpServers": {
-      "figma-design": {
+      "cursorcanvas": {
         "command": "node",
-        "args": ["/Users/yourusername/figma-design-mcp/server/dist/index.js"]
+        "args": ["/Users/yourusername/CursorCanvas/server/dist/index.js"]
       }
     }
   }
@@ -48,7 +48,7 @@ Same content as above, with your absolute path to `server/dist/index.js`.
 ## 3. Confirm the agent has the tools
 
 1. **Cursor Settings** → search **MCP** (or **Features** → **MCP**).
-2. Find **figma-design** in the list and ensure it is **enabled**.
+2. Find **cursorcanvas** in the list and ensure it is **enabled**.
 3. You should see tools such as: `create_frame`, `create_ellipse`, `create_rectangle`, `create_text`, `get_selection`, `get_figma_prompt`.
 
 If the server is **disabled** or **missing**:

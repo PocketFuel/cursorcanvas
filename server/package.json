@@ -1,9 +1,9 @@
 {
-  "name": "figma-design-server",
+  "name": "cursorcanvas-server",
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "figma-design-mcp": "./dist/index.js"
+    "cursorcanvas-mcp": "./dist/index.js"
   },
   "scripts": {
     "build": "tsc",

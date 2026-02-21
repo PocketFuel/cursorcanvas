@@ -1,8 +1,8 @@
 {
   "mcpServers": {
-    "figma-design": {
+    "cursorcanvas": {
       "command": "node",
-      "args": ["/ABSOLUTE/PATH/TO/figma-design-mcp/server/dist/index.js"]
+      "args": ["/ABSOLUTE/PATH/TO/CursorCanvas/server/dist/index.js"]
     }
   }
 }

@@ -9,7 +9,7 @@
   "editorType": [
     "figma"
   ],
-  "ui": "dist/figma-design-ui.html",
+  "ui": "dist/cursorcanvas-ui.html",
   "networkAccess": {
     "allowedDomains": [
       "none"

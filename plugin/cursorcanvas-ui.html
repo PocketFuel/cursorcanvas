@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), clipboard-write=(), display-capture=(), geolocation=()">
+  <meta http-equiv="Feature-Policy" content="camera 'none'; microphone 'none'; clipboard-write 'none'; display-capture 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root,
+    body.theme-dark {
+      --bg-a: #0f0f10;
+      --bg-b: #1a1a1b;
+      --panel: rgba(20, 20, 22, 0.9);
+      --panel-stroke: rgba(124, 124, 130, 0.32);
+      --text: #efefef;
+      --muted: #a2a2a8;
+      --input: rgba(12, 12, 14, 0.82);
+      --input-focus: rgba(34, 34, 38, 0.9);
+      --accent: #ececef;
+      --accent-2: #d3d3d8;
+      --danger: #d88d8d;
+      --ok: #8fb89a;
+      --warn: #bba970;
+      --shadow: 0 16px 26px rgba(0, 0, 0, 0.36);
+    }
+
+    body.theme-light {
+      --bg-a: #f3f3f4;
+      --bg-b: #e8e8eb;
+      --panel: rgba(255, 255, 255, 0.9);
+      --panel-stroke: rgba(152, 152, 159, 0.34);
+      --text: #1f1f22;
+      --muted: #65656e;
+      --input: rgba(245, 245, 247, 0.95);
+      --input-focus: rgba(235, 235, 238, 1);
+      --accent: #202024;
+      --accent-2: #111114;
+      --danger: #a14d4d;
+      --ok: #4f7758;
+      --warn: #8a7640;
+      --shadow: 0 12px 24px rgba(44, 44, 47, 0.14);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      padding: 12px;
+      font-family: "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 8% 8%, rgba(170, 170, 175, 0.15), transparent 30%),
+        radial-gradient(circle at 88% 12%, rgba(125, 125, 130, 0.16), transparent 30%),
+        linear-gradient(160deg, var(--bg-a), var(--bg-b));
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--panel-stroke);
+      border-radius: 14px;
+      box-shadow: var(--shadow);
+      padding: 10px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .brand {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0.02em;
+      font-weight: 700;
+    }
+
+    .subtle {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 11px;
+      line-height: 1.4;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .col {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .grow { flex: 1; }
+
+    label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+      margin-bottom: 4px;
+      display: block;
+    }
+
+    input, select, textarea, button {
+      font-family: inherit;
+      font-size: 12px;
+      border-radius: 10px;
+    }
+
+    input, select, textarea {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid rgba(132, 132, 139, 0.35);
+      background: var(--input);
+      color: var(--text);
+    }
+
+    textarea {
+      resize: none;
+      min-height: 74px;
+      line-height: 1.35;
+    }
+
+    input:focus, select:focus, textarea:focus {
+      outline: none;
+      background: var(--input-focus);
+      border-color: rgba(184, 184, 192, 0.8);
+      box-shadow: 0 0 0 3px rgba(148, 148, 156, 0.2);
+    }
+
+    button {
+      border: 1px solid rgba(130, 130, 138, 0.4);
+      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      color: var(--bg-a);
+      font-weight: 700;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.02);
+      transform: translateY(-1px);
+    }
+
+    button.ghost {
+      background: rgba(35, 35, 39, 0.75);
+      color: var(--text);
+    }
+
+    body.theme-light button.ghost {
+      background: rgba(237, 237, 240, 0.95);
+      color: var(--text);
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .status {
+      margin-top: 8px;
+      display: inline-flex;
+      gap: 6px;
+      align-items: center;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      border-radius: 999px;
+      padding: 6px 9px;
+      border: 1px solid transparent;
+    }
+
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+    }
+
+    .status.disconnected {
+      color: var(--danger);
+      border-color: rgba(178, 103, 103, 0.45);
+      background: rgba(144, 80, 80, 0.2);
+    }
+    .status.disconnected::before { background: var(--danger); }
+
+    .status.connected {
+      color: var(--ok);
+      border-color: rgba(121, 160, 129, 0.45);
+      background: rgba(95, 127, 102, 0.2);
+    }
+    .status.connected::before { background: var(--ok); }
+
+    .status.connecting {
+      color: var(--warn);
+      border-color: rgba(173, 149, 91, 0.45);
+      background: rgba(143, 123, 71, 0.2);
+    }
+    .status.connecting::before { background: var(--warn); }
+
+    .error {
+      margin-top: 8px;
+      min-height: 14px;
+      color: var(--danger);
+      font-size: 11px;
+      line-height: 1.35;
+    }
+
+    .chat-log {
+      height: 280px;
+      overflow: auto;
+      border-radius: 12px;
+      border: 1px solid rgba(126, 126, 133, 0.3);
+      background: rgba(11, 11, 13, 0.58);
+      padding: 9px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    body.theme-light .chat-log {
+      background: rgba(241, 241, 244, 0.8);
+    }
+
+    .bubble {
+      padding: 8px 9px;
+      border-radius: 10px;
+      font-size: 11px;
+      white-space: pre-wrap;
+      line-height: 1.35;
+    }
+
+    .bubble.user {
+      align-self: flex-end;
+      max-width: 82%;
+      background: rgba(153, 153, 160, 0.26);
+      border: 1px solid rgba(160, 160, 167, 0.32);
+    }
+
+    .bubble.assistant {
+      align-self: flex-start;
+      max-width: 88%;
+      background: rgba(80, 113, 90, 0.16);
+      border: 1px solid rgba(132, 172, 143, 0.32);
+    }
+
+    body.theme-light .bubble.assistant {
+      background: rgba(97, 134, 107, 0.15);
+    }
+
+    .meta {
+      color: var(--muted);
+      font-size: 10px;
+      margin-top: 6px;
+    }
+
+    .hidden { display: none; }
+
+    @media (max-width: 390px) {
+      .row { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <section class="card">
+    <div class="topbar">
+      <h1 class="brand">CursorCanvas</h1>
+      <button id="themeToggle" class="ghost" type="button">Light Mode</button>
+    </div>
+    <p class="subtle">Chat directly in Figma and let CursorCanvas run design actions on canvas.</p>
+
+    <label for="url">MCP URL</label>
+    <div class="row">
+      <input id="url" class="grow" type="text" value="ws://localhost:3055">
+      <button id="connect" type="button">Connect</button>
+    </div>
+    <div id="status" class="status disconnected">Disconnected</div>
+    <div id="error" class="error"></div>
+  </section>
+
+  <section class="card col">
+    <div class="row">
+      <div class="grow">
+        <label for="providerSelect">Provider</label>
+        <select id="providerSelect">
+          <option value="local">CursorCanvas Local (No credits)</option>
+          <option value="openai">Codex / OpenAI</option>
+          <option value="cursor">Cursor (coming soon)</option>
+          <option value="lovable">Lovable (coming soon)</option>
+        </select>
+      </div>
+      <div class="grow">
+        <label for="modelInput">Model</label>
+        <input id="modelInput" type="text" value="gpt-5-mini">
+      </div>
+    </div>
+
+    <div id="apiKeyRow" class="hidden">
+      <label for="apiKeyInput">OpenAI API Key</label>
+      <input id="apiKeyInput" type="password" placeholder="sk-...">
+    </div>
+
+    <div id="chatLog" class="chat-log"></div>
+    <div id="chatMeta" class="meta">Local provider works without external credits.</div>
+    <textarea id="chatInput" placeholder="Ask CursorCanvas to design something in Figma..."></textarea>
+    <div class="row">
+      <button id="sendChat" class="grow" type="button">Send</button>
+      <button id="clearChat" class="ghost" type="button">Clear</button>
+    </div>
+  </section>
+
+  <script src="./dist/ui.js"></script>
+</body>
+</html>

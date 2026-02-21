@@ -8,51 +8,23 @@ const urlInput = byId<HTMLInputElement>("url");
 const connectBtn = byId<HTMLButtonElement>("connect");
 const statusEl = byId<HTMLDivElement>("status");
 const errorEl = byId<HTMLDivElement>("error");
-const promptInput = byId<HTMLTextAreaElement>("promptInput");
-const sendPromptBtn = byId<HTMLButtonElement>("sendPrompt");
-const sendSuccessEl = byId<HTMLParagraphElement>("sendSuccess");
-const promptCounterEl = byId<HTMLSpanElement>("promptCounter");
-const toolFeedbackEl = byId<HTMLDivElement>("toolFeedback");
-const cursorProjectPathInput = byId<HTMLInputElement>("cursorProjectPath");
-const cursorKickoffInput = byId<HTMLTextAreaElement>("cursorKickoff");
-const openCursorAgentBtn = byId<HTMLButtonElement>("openCursorAgent");
-const cursorFeedbackEl = byId<HTMLDivElement>("cursorFeedback");
 const themeToggleBtn = byId<HTMLButtonElement>("themeToggle");
 
-const clearPromptBtn = document.getElementById("clearPrompt") as HTMLButtonElement | null;
-const templateBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".template-btn"));
-const toolBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-tool-action]"));
+const providerSelect = byId<HTMLSelectElement>("providerSelect");
+const modelInput = byId<HTMLInputElement>("modelInput");
+const apiKeyRow = byId<HTMLDivElement>("apiKeyRow");
+const apiKeyInput = byId<HTMLInputElement>("apiKeyInput");
+const chatLog = byId<HTMLDivElement>("chatLog");
+const chatInput = byId<HTMLTextAreaElement>("chatInput");
+const sendChatBtn = byId<HTMLButtonElement>("sendChat");
+const clearChatBtn = byId<HTMLButtonElement>("clearChat");
+const chatMetaEl = byId<HTMLDivElement>("chatMeta");
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
   timeout: ReturnType<typeof setTimeout>;
 }
-
-const pending = new Map<string, PendingRequest>();
-
-let ws: WebSocket | null = null;
-let sendSuccessTimeout: ReturnType<typeof setTimeout> | null = null;
-let toolFeedbackTimeout: ReturnType<typeof setTimeout> | null = null;
-let manualDisconnect = false;
-
-let httpMode = false;
-let httpBaseUrl = "";
-let httpAbort: AbortController | null = null;
-
-const DEFAULT_WS_URL = "ws://localhost:3055";
-const LOCAL_HTTP_MIN = 3056;
-const LOCAL_HTTP_MAX = 3080;
-const PORT_SCAN_TIMEOUT_MS = 420;
-const THEME_STORAGE_KEY = "cursorcanvas_theme";
-
-const defaultCursorKickoff = [
-  "You are my CursorCanvas design agent working through Cursor with the CursorCanvas MCP tools.",
-  "Always design with strong visual hierarchy, deliberate spacing rhythm, clear typography, and reusable components.",
-  "Prefer grayscale-first UI foundations, then add color intentionally and sparingly.",
-  "When creating Figma output, use auto-layout, semantic layer naming, and production-ready component structure.",
-  "Start by reading the latest Figma prompt via get_figma_prompt, then execute it precisely.",
-].join("\n");
 
 interface WsAddress {
   protocol: "ws" | "wss";
@@ -64,39 +36,35 @@ interface HealthResponse {
   ok?: boolean;
   wsPort?: number;
   httpPort?: number;
-  pluginConnected?: boolean;
 }
 
-const templates: Record<string, string> = {
-  landing: [
-    "Design a high-conversion landing hero in Figma.",
-    "Include: top nav, value proposition, primary CTA, secondary CTA, social proof strip.",
-    "Style direction: bold editorial, asymmetric layout, premium spacing rhythm.",
-    "Build with an auto-layout frame and name key layers clearly for handoff.",
-  ].join("\n"),
-  dashboard: [
-    "Create a desktop dashboard UI with a left sidebar, top bar, KPI cards, and activity table.",
-    "Use a consistent 8px spacing system and 12px+ typography hierarchy.",
-    "Deliver both light and dark-ready structure by using token-friendly color groupings.",
-    "Name reusable modules so they can become components.",
-  ].join("\n"),
-  component: [
-    "Create a reusable component set in Figma for buttons and inputs.",
-    "Generate primary, secondary, ghost variants and small/medium/large sizes.",
-    "Apply clear naming conventions and maintain consistent corner radius and padding rules.",
-    "Use auto-layout and prepare it so the system can be scaled across screens.",
-  ].join("\n"),
-  audit: [
-    "Review and refine the selected Figma area for visual quality.",
-    "Improve spacing consistency, alignment, contrast, and typographic hierarchy.",
-    "Replace weak defaults with stronger visual rhythm and clearer emphasis.",
-    "Output a before/after structure using clean layer names.",
-  ].join("\n"),
-};
-
-function makeRequestId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
 }
+
+interface ChatResponse {
+  assistant: string;
+  provider: string;
+  model?: string;
+  toolCalls?: Array<{ tool: string; params: Record<string, unknown> }>;
+}
+
+const pending = new Map<string, PendingRequest>();
+const chatHistory: ChatMessage[] = [];
+
+let ws: WebSocket | null = null;
+let manualDisconnect = false;
+let httpMode = false;
+let httpBaseUrl = "";
+let httpAbort: AbortController | null = null;
+
+const DEFAULT_WS_URL = "ws://localhost:3055";
+const LOCAL_HTTP_MIN = 3056;
+const LOCAL_HTTP_MAX = 3080;
+const PORT_SCAN_TIMEOUT_MS = 420;
+const THEME_STORAGE_KEY = "cursorcanvas_theme";
+const API_KEY_STORAGE_KEY = "cursorcanvas_openai_key";
 
 function setStatus(kind: "disconnected" | "connected" | "connecting", text: string) {
   statusEl.className = `status ${kind}`;
@@ -107,28 +75,8 @@ function setError(msg: string) {
   errorEl.textContent = msg;
 }
 
-function setCursorFeedback(msg: string, isError = false) {
-  cursorFeedbackEl.textContent = msg;
-  cursorFeedbackEl.style.color = isError ? "#ff8b8b" : "";
-}
-
-function showSendSuccess() {
-  sendSuccessEl.classList.remove("hidden");
-  if (sendSuccessTimeout) clearTimeout(sendSuccessTimeout);
-  sendSuccessTimeout = setTimeout(() => {
-    sendSuccessEl.classList.add("hidden");
-    sendSuccessTimeout = null;
-  }, 10000);
-}
-
-function showToolFeedback(msg: string, isError = false) {
-  toolFeedbackEl.textContent = msg;
-  toolFeedbackEl.style.color = isError ? "#d88d8d" : "";
-  if (toolFeedbackTimeout) clearTimeout(toolFeedbackTimeout);
-  toolFeedbackTimeout = setTimeout(() => {
-    toolFeedbackEl.textContent = "";
-    toolFeedbackTimeout = null;
-  }, 7000);
+function setMeta(text: string) {
+  chatMetaEl.textContent = text;
 }
 
 function applyTheme(theme: "dark" | "light") {
@@ -138,10 +86,36 @@ function applyTheme(theme: "dark" | "light") {
   localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
-function updatePromptCounter() {
-  const count = promptInput.value.length;
-  promptCounterEl.textContent = `${count} chars`;
-  promptCounterEl.style.color = count > 1800 ? "#ffb2b8" : "";
+function updateProviderUI() {
+  const provider = providerSelect.value;
+  const openai = provider === "openai";
+  apiKeyRow.classList.toggle("hidden", !openai);
+  modelInput.disabled = !openai;
+
+  if (provider === "local") {
+    setMeta("Local provider runs in CursorCanvas server and does not require credits.");
+  } else if (provider === "openai") {
+    setMeta("OpenAI provider uses function calls and executes actions directly in Figma.");
+  } else {
+    setMeta(`${provider} connector is coming soon. Use Local or OpenAI right now.`);
+  }
+}
+
+function addChatBubble(role: "user" | "assistant", text: string) {
+  const bubble = document.createElement("div");
+  bubble.className = `bubble ${role}`;
+  bubble.textContent = text;
+  chatLog.appendChild(bubble);
+  chatLog.scrollTop = chatLog.scrollHeight;
+}
+
+function clearChat() {
+  chatHistory.length = 0;
+  chatLog.innerHTML = "";
+}
+
+function makeRequestId(prefix: string): string {
+  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function rejectAllPending(message: string) {
@@ -162,13 +136,6 @@ function createPendingRequest(id: string, timeoutMs = 30000): Promise<unknown> {
     }, timeoutMs);
     pending.set(id, { resolve, reject, timeout });
   });
-}
-
-function callPluginCommand(tool: string, params: Record<string, unknown>, timeoutMs = 30000): Promise<unknown> {
-  const id = makeRequestId("ui");
-  const promise = createPendingRequest(id, timeoutMs);
-  parent.postMessage({ pluginMessage: { type: "command", id, tool, params } }, "*");
-  return promise;
 }
 
 window.onmessage = (event: MessageEvent) => {
@@ -247,9 +214,7 @@ async function discoverLocalWsUrl(seedWsUrl: string): Promise<string | null> {
     );
     if (!health || !health.ok) continue;
     const wsPort = typeof health.wsPort === "number" ? health.wsPort : httpPort - 1;
-    if (wsPort > 0) {
-      return buildWsUrl(parsed.protocol, parsed.host, wsPort);
-    }
+    if (wsPort > 0) return buildWsUrl(parsed.protocol, parsed.host, wsPort);
   }
   return null;
 }
@@ -258,9 +223,8 @@ async function runHttpPollLoop(baseUrl: string) {
   while (httpMode && httpAbort) {
     try {
       const res = await fetch(baseUrl + "/poll", { signal: httpAbort.signal });
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
       const cmd = (await res.json()) as { id: string; tool: string; params: Record<string, unknown> };
       const { id, tool, params } = cmd;
       if (!id || !tool) continue;
@@ -302,7 +266,7 @@ function startHttpMode(wsUrl: string) {
   setError("");
   connectBtn.textContent = "Disconnect";
   connectBtn.disabled = false;
-  runHttpPollLoop(httpBaseUrl);
+  void runHttpPollLoop(httpBaseUrl);
 }
 
 function stopHttpMode() {
@@ -314,28 +278,23 @@ function stopHttpMode() {
 }
 
 async function connect() {
-  setStatus("connecting", "Scanning local MCP ports...");
+  setStatus("connecting", "Scanning local ports...");
   setError("");
   connectBtn.disabled = true;
 
   const initialUrl = urlInput.value.trim() || DEFAULT_WS_URL;
   const discoveredUrl = await discoverLocalWsUrl(initialUrl);
   const url = discoveredUrl ?? initialUrl;
-
   if (discoveredUrl && discoveredUrl !== initialUrl) {
     urlInput.value = discoveredUrl;
-    showToolFeedback(`Discovered MCP server at ${discoveredUrl}`);
   }
 
   manualDisconnect = false;
   stopHttpMode();
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.close();
-  }
+  if (ws && ws.readyState === WebSocket.OPEN) ws.close();
 
   setStatus("connecting", "Connecting...");
-
   ws = new WebSocket(url);
 
   const wsTimeout = setTimeout(() => {
@@ -348,6 +307,7 @@ async function connect() {
 
   ws.onopen = () => {
     clearTimeout(wsTimeout);
+    httpBaseUrl = wsUrlToHttpPollUrl(url);
     setStatus("connected", "Connected");
     connectBtn.textContent = "Disconnect";
     connectBtn.disabled = false;
@@ -376,12 +336,12 @@ async function connect() {
         if (!ws && !httpMode && connectBtn.disabled === false) {
           startHttpMode(url);
         }
-      }, 600);
+      }, 700);
     }
   };
 
   ws.onerror = () => {
-    setError("Connection error. If Cursor picked a new port, click Connect again to auto-discover.");
+    setError("Connection error. Click Connect again to retry auto-discovery.");
   };
 
   ws.onmessage = async (event: MessageEvent) => {
@@ -407,131 +367,81 @@ async function connect() {
   };
 }
 
-function buildCursorUrl(projectPath: string): string {
-  const trimmed = projectPath.trim();
-  if (!trimmed) return "cursor://";
-  const normalized = trimmed.replace(/^file:\/\//, "");
-  return normalized.startsWith("/") ? `cursor://file${normalized}` : `cursor://file/${normalized}`;
+function isConnected(): boolean {
+  return (ws != null && ws.readyState === WebSocket.OPEN) || httpMode;
 }
 
-async function sendPromptToCursor() {
-  const text = promptInput.value.trim();
+function getChatBaseUrl(): string {
+  if (httpBaseUrl) return httpBaseUrl;
+  return wsUrlToHttpPollUrl(urlInput.value.trim() || DEFAULT_WS_URL);
+}
+
+async function sendChat() {
+  const text = chatInput.value.trim();
   if (!text) return;
-
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    try {
-      ws.send(JSON.stringify({ type: "figma_prompt", text }));
-      promptInput.value = "";
-      updatePromptCounter();
-      setError("");
-      showSendSuccess();
-    } catch {
-      setError("Send failed. Try reconnecting.");
-    }
+  if (!isConnected()) {
+    setError("Connect CursorCanvas first.");
     return;
   }
 
-  if (httpMode && httpBaseUrl) {
-    try {
-      const res = await fetch(httpBaseUrl + "/prompt", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      if (res.ok) {
-        promptInput.value = "";
-        updatePromptCounter();
-        setError("");
-        showSendSuccess();
-      } else {
-        setError(`Server error ${res.status}. Use Figma desktop app if running in browser.`);
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(
-        `Cannot reach ${httpBaseUrl} (${msg}). Click Connect again to auto-discover active MCP port, or use Cursor log URL.`
-      );
-    }
+  const provider = providerSelect.value;
+  if (provider === "cursor" || provider === "lovable") {
+    addChatBubble("assistant", `${provider} connector is not implemented yet. Use CursorCanvas Local or Codex/OpenAI.`);
+    setMeta(`${provider} connector coming soon.`);
     return;
   }
 
-  setError("Connect first to send prompts to your agent.");
-}
+  const message: ChatMessage = { role: "user", content: text };
+  chatHistory.push(message);
+  addChatBubble("user", text);
+  chatInput.value = "";
+  sendChatBtn.disabled = true;
+  setError("");
 
-async function sendKickoffToCursorCanvas(text: string): Promise<boolean> {
-  if (!text.trim()) return true;
+  try {
+    const body = {
+      provider,
+      model: modelInput.value.trim() || undefined,
+      apiKey: provider === "openai" ? apiKeyInput.value.trim() || undefined : undefined,
+      message: text,
+      conversation: chatHistory.slice(-20),
+    };
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: "figma_prompt", text }));
-    return true;
-  }
-  if (httpMode && httpBaseUrl) {
-    const res = await fetch(httpBaseUrl + "/prompt", {
+    const res = await fetch(getChatBaseUrl() + "/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify(body),
     });
-    return res.ok;
-  }
-  return false;
-}
 
-async function openCursorAgent() {
-  const kickoff = cursorKickoffInput.value.trim();
-  const projectPath = cursorProjectPathInput.value.trim();
-  const cursorUrl = buildCursorUrl(projectPath);
-  setCursorFeedback("");
-  setError("");
-
-  try {
-    const queued = await sendKickoffToCursorCanvas(kickoff);
-    if (!queued) {
-      setCursorFeedback("Connect CursorCanvas first so kickoff instructions are available to the agent.", true);
-      return;
-    }
-    await callPluginCommand("open_external_url", { url: cursorUrl }, 10000);
-    setCursorFeedback("Opened Cursor. In chat, start with: 'Do the Figma prompt'.");
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    setCursorFeedback(`Could not open Cursor URL (${msg}). Open Cursor manually, then say: Do the Figma prompt`, true);
-  }
-}
-
-function insertTemplate(templateName: string) {
-  const template = templates[templateName];
-  if (!template) return;
-  const current = promptInput.value.trim();
-  promptInput.value = current ? `${current}\n\n${template}` : template;
-  updatePromptCounter();
-  promptInput.focus();
-}
-
-async function runQuickTool(btn: HTMLButtonElement) {
-  const tool = btn.dataset.toolAction;
-  if (!tool) return;
-
-  let params: Record<string, unknown> = {};
-  const raw = btn.dataset.toolParams;
-  if (raw) {
+    const textBody = await res.text();
+    let data: ChatResponse | { error?: string };
     try {
-      params = JSON.parse(raw) as Record<string, unknown>;
+      data = textBody ? (JSON.parse(textBody) as ChatResponse | { error?: string }) : {};
     } catch {
-      showToolFeedback("Invalid tool preset JSON.", true);
+      data = {};
+    }
+
+    if (!res.ok) {
+      const errMsg = "error" in data && data.error ? data.error : `Server error ${res.status}`;
+      setError(errMsg);
+      addChatBubble("assistant", `Error: ${errMsg}`);
       return;
     }
-  }
 
-  btn.disabled = true;
-  setError("");
+    const assistant = "assistant" in data && typeof data.assistant === "string"
+      ? data.assistant
+      : "Done.";
+    chatHistory.push({ role: "assistant", content: assistant });
+    addChatBubble("assistant", assistant);
 
-  try {
-    await callPluginCommand(tool, params, 25000);
-    showToolFeedback(`Ran ${tool} successfully.`);
+    const toolsUsed = "toolCalls" in data && Array.isArray(data.toolCalls) ? data.toolCalls.length : 0;
+    setMeta(`${provider} responded${toolsUsed > 0 ? ` and ran ${toolsUsed} tool${toolsUsed > 1 ? "s" : ""}` : ""}.`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    showToolFeedback(`Tool failed: ${msg}`, true);
+    setError(`Chat request failed: ${msg}`);
+    addChatBubble("assistant", `Error: ${msg}`);
   } finally {
-    btn.disabled = false;
+    sendChatBtn.disabled = false;
   }
 }
 
@@ -555,63 +465,40 @@ connectBtn.addEventListener("click", () => {
   }
 });
 
-sendPromptBtn.addEventListener("click", () => {
-  sendPromptToCursor();
+providerSelect.addEventListener("change", () => {
+  updateProviderUI();
 });
 
-promptInput.addEventListener("keydown", (e) => {
+sendChatBtn.addEventListener("click", () => {
+  void sendChat();
+});
+
+chatInput.addEventListener("keydown", (e) => {
   if (e.key === "Enter" && !e.shiftKey) {
     e.preventDefault();
-    sendPromptToCursor();
+    void sendChat();
   }
 });
 
-promptInput.addEventListener("input", () => {
-  updatePromptCounter();
+clearChatBtn.addEventListener("click", () => {
+  clearChat();
+  setMeta("Chat cleared.");
 });
-
-if (clearPromptBtn) {
-  clearPromptBtn.addEventListener("click", () => {
-    promptInput.value = "";
-    updatePromptCounter();
-    promptInput.focus();
-  });
-}
-
-for (const btn of templateBtns) {
-  btn.addEventListener("click", () => {
-    const key = btn.dataset.template;
-    if (!key) return;
-    insertTemplate(key);
-  });
-}
-
-for (const btn of toolBtns) {
-  btn.addEventListener("click", () => {
-    runQuickTool(btn);
-  });
-}
 
 themeToggleBtn.addEventListener("click", () => {
   const current = document.body.classList.contains("theme-light") ? "light" : "dark";
   applyTheme(current === "light" ? "dark" : "light");
 });
 
-openCursorAgentBtn.addEventListener("click", () => {
-  void openCursorAgent();
-});
-
-cursorKickoffInput.addEventListener("keydown", (e) => {
-  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-    e.preventDefault();
-    void openCursorAgent();
-  }
+apiKeyInput.addEventListener("change", () => {
+  localStorage.setItem(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
 });
 
 const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
 applyTheme(storedTheme === "light" ? "light" : "dark");
-if (!cursorKickoffInput.value.trim()) {
-  cursorKickoffInput.value = defaultCursorKickoff;
-}
 
-updatePromptCounter();
+const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
+if (storedApiKey) apiKeyInput.value = storedApiKey;
+
+updateProviderUI();
+addChatBubble("assistant", "CursorCanvas ready. Connect, then ask me to design something in Figma.");
