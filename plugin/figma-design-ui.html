@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Permissions-Policy" content="camera=(), microphone=(), clipboard-write=(), display-capture=(), geolocation=()">
+  <meta http-equiv="Feature-Policy" content="camera 'none'; microphone 'none'; clipboard-write 'none'; display-capture 'none'">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      --bg-a: #081426;
+      --bg-b: #11223b;
+      --panel-bg: rgba(13, 28, 46, 0.88);
+      --panel-stroke: rgba(149, 182, 216, 0.2);
+      --text: #ecf4ff;
+      --muted: #9db2ca;
+      --accent: #28d1a7;
+      --accent-strong: #17b58e;
+      --accent-alt: #ff9e42;
+      --danger: #ff838e;
+      --ok: #79e6bf;
+      --warn: #ffd27f;
+      --input-bg: rgba(5, 13, 24, 0.52);
+      --shadow: 0 16px 30px rgba(0, 0, 0, 0.34);
+      --radius-lg: 18px;
+      --radius-md: 12px;
+      --radius-sm: 8px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 14px;
+      min-height: 100vh;
+      font-family: "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
+      font-size: 12px;
+      color: var(--text);
+      background:
+        radial-gradient(circle at 12% 8%, rgba(40, 209, 167, 0.2), transparent 34%),
+        radial-gradient(circle at 88% 12%, rgba(255, 158, 66, 0.24), transparent 30%),
+        linear-gradient(160deg, var(--bg-a), var(--bg-b));
+    }
+
+    .shell {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .hero {
+      padding: 14px;
+      border-radius: var(--radius-lg);
+      border: 1px solid rgba(147, 189, 225, 0.27);
+      background:
+        linear-gradient(135deg, rgba(30, 53, 79, 0.78), rgba(20, 35, 57, 0.86)),
+        linear-gradient(90deg, rgba(40, 209, 167, 0.1), rgba(255, 158, 66, 0.09));
+      box-shadow: var(--shadow);
+      position: relative;
+      overflow: hidden;
+      animation: rise 360ms ease forwards;
+    }
+
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: -120% 50% auto -30%;
+      height: 180%;
+      background: linear-gradient(95deg, transparent, rgba(255, 255, 255, 0.12), transparent);
+      transform: rotate(14deg);
+      pointer-events: none;
+    }
+
+    .hero-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .brand {
+      margin: 0;
+      font-size: 17px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      padding: 5px 8px;
+      border-radius: 999px;
+      background: rgba(40, 209, 167, 0.18);
+      border: 1px solid rgba(119, 242, 202, 0.42);
+      color: #d8fff3;
+      white-space: nowrap;
+    }
+
+    .badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 6px rgba(40, 209, 167, 0.18);
+    }
+
+    .hero-text {
+      margin: 10px 0 0;
+      line-height: 1.45;
+      color: #c7d9ee;
+      max-width: 96%;
+    }
+
+    .panel {
+      border-radius: var(--radius-lg);
+      border: 1px solid var(--panel-stroke);
+      background: var(--panel-bg);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+      padding: 12px;
+      animation: rise 360ms ease forwards;
+      opacity: 0;
+      transform: translateY(8px);
+    }
+
+    .panel:nth-of-type(2) { animation-delay: 40ms; }
+    .panel:nth-of-type(3) { animation-delay: 80ms; }
+    .panel:nth-of-type(4) { animation-delay: 120ms; }
+
+    .panel-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .panel-title {
+      margin: 0;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.03em;
+      text-transform: uppercase;
+      color: #d5e5f7;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--muted);
+    }
+
+    input[type="text"],
+    textarea {
+      width: 100%;
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(152, 188, 223, 0.28);
+      background: var(--input-bg);
+      color: var(--text);
+      padding: 9px 11px;
+      font-size: 12px;
+      font-family: inherit;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+    }
+
+    input[type="text"]::placeholder,
+    textarea::placeholder {
+      color: #7f97b2;
+    }
+
+    input[type="text"]:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(121, 230, 191, 0.8);
+      box-shadow: 0 0 0 3px rgba(40, 209, 167, 0.23);
+      background: rgba(9, 20, 34, 0.75);
+    }
+
+    textarea {
+      min-height: 112px;
+      resize: vertical;
+      margin-top: 4px;
+    }
+
+    .row {
+      display: flex;
+      gap: 8px;
+      align-items: stretch;
+    }
+
+    .grow {
+      flex: 1;
+    }
+
+    button {
+      border: 1px solid transparent;
+      border-radius: var(--radius-md);
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      padding: 8px 12px;
+      transition: transform 120ms ease, border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+    }
+
+    button:disabled {
+      opacity: 0.52;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-primary {
+      background: linear-gradient(130deg, var(--accent), var(--accent-strong));
+      color: #04251e;
+      min-width: 106px;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      transform: translateY(-1px);
+      background: linear-gradient(130deg, #47e8bf, #1ec49a);
+    }
+
+    .btn-ghost {
+      background: rgba(16, 32, 52, 0.9);
+      border-color: rgba(133, 175, 214, 0.28);
+      color: #cce1f8;
+    }
+
+    .btn-ghost:hover:not(:disabled) {
+      transform: translateY(-1px);
+      border-color: rgba(255, 158, 66, 0.8);
+      color: #ffe6cf;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      margin-top: 9px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .status::before {
+      content: "";
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      box-shadow: 0 0 0 4px transparent;
+    }
+
+    .status.disconnected {
+      color: #ffc0c6;
+      background: rgba(143, 37, 53, 0.32);
+      border: 1px solid rgba(255, 131, 142, 0.36);
+    }
+
+    .status.disconnected::before {
+      background: var(--danger);
+      box-shadow: 0 0 0 4px rgba(255, 131, 142, 0.18);
+    }
+
+    .status.connected {
+      color: #ccffe9;
+      background: rgba(33, 105, 78, 0.34);
+      border: 1px solid rgba(121, 230, 191, 0.35);
+    }
+
+    .status.connected::before {
+      background: var(--ok);
+      box-shadow: 0 0 0 4px rgba(121, 230, 191, 0.18);
+    }
+
+    .status.connecting {
+      color: #ffe3b7;
+      background: rgba(122, 90, 23, 0.32);
+      border: 1px solid rgba(255, 210, 127, 0.35);
+    }
+
+    .status.connecting::before {
+      background: var(--warn);
+      box-shadow: 0 0 0 4px rgba(255, 210, 127, 0.2);
+    }
+
+    .error {
+      min-height: 14px;
+      margin-top: 8px;
+      color: var(--danger);
+      line-height: 1.35;
+    }
+
+    .hint {
+      margin: 8px 0 0;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .chips {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+      margin-bottom: 8px;
+    }
+
+    .chip {
+      width: 100%;
+      text-align: left;
+      background: rgba(14, 28, 46, 0.92);
+      border-color: rgba(134, 175, 212, 0.3);
+      color: #d8e8fa;
+      font-size: 10px;
+      font-weight: 600;
+      padding: 8px 9px;
+      border-radius: 11px;
+    }
+
+    .chip:hover {
+      border-color: rgba(121, 230, 191, 0.88);
+      color: #e8fff6;
+      transform: translateY(-1px);
+    }
+
+    .composer-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-top: 8px;
+    }
+
+    .counter {
+      color: var(--muted);
+      font-size: 10px;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    .tool-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 7px;
+    }
+
+    .tool-btn {
+      text-align: left;
+      min-height: 50px;
+      background: linear-gradient(140deg, rgba(20, 37, 60, 0.96), rgba(12, 25, 42, 0.96));
+      border-color: rgba(133, 175, 214, 0.26);
+      color: #d6e8fb;
+      line-height: 1.25;
+      border-radius: 12px;
+      padding: 9px;
+    }
+
+    .tool-btn:hover:not(:disabled) {
+      border-color: rgba(255, 158, 66, 0.85);
+      color: #ffedda;
+      transform: translateY(-1px);
+    }
+
+    .tool-feedback {
+      min-height: 14px;
+      margin-top: 8px;
+      color: #9de5ff;
+    }
+
+    .hidden {
+      display: none;
+    }
+
+    @media (max-width: 390px) {
+      body {
+        padding: 10px;
+      }
+      .chips,
+      .tool-grid {
+        grid-template-columns: 1fr;
+      }
+      .row {
+        flex-direction: column;
+      }
+      .btn-primary {
+        width: 100%;
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      * {
+        animation: none !important;
+        transition: none !important;
+      }
+    }
+
+    @keyframes rise {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <section class="hero">
+      <div class="hero-top">
+        <h1 class="brand">CursorCanvas Studio</h1>
+        <span class="badge"><span class="badge-dot"></span>Agent Design Mode</span>
+      </div>
+      <p class="hero-text">Build richer Figma outcomes with structured prompts, reusable design recipes, and one-click tools your agent can execute immediately.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Connection</h2>
+      </div>
+      <label for="url">CursorCanvas MCP URL</label>
+      <div class="row">
+        <input class="grow" type="text" id="url" placeholder="ws://localhost:3055" value="ws://localhost:3055">
+        <button id="connect" class="btn-primary" type="button">Connect</button>
+      </div>
+      <div id="status" class="status disconnected">Disconnected</div>
+      <div id="error" class="error"></div>
+      <p class="hint">Open this repo in Cursor/Lovable/Codex with MCP enabled, then connect here. If WebSocket fails, HTTP fallback is automatic.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Prompt Lab</h2>
+        <button id="clearPrompt" class="btn-ghost" type="button">Clear</button>
+      </div>
+      <div class="chips">
+        <button type="button" class="chip template-btn" data-template="landing">Landing Hero</button>
+        <button type="button" class="chip template-btn" data-template="dashboard">Dashboard Kit</button>
+        <button type="button" class="chip template-btn" data-template="component">Component Trainer</button>
+        <button type="button" class="chip template-btn" data-template="audit">Visual Audit</button>
+      </div>
+      <textarea id="promptInput" placeholder="Describe what to design in Figma. Press Enter to send, Shift+Enter for a new line."></textarea>
+      <div class="composer-footer">
+        <span id="promptCounter" class="counter">0 chars</span>
+        <button id="sendPrompt" class="btn-primary" type="button">Send to Agent</button>
+      </div>
+      <p id="sendHint" class="hint">After sending, ask the agent: <strong>Do the Figma prompt</strong> or <strong>Execute latest Figma request</strong>.</p>
+      <p id="sendSuccess" class="status connected hidden">Prompt saved. Ask your agent to run it.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Quick Tools</h2>
+        <span class="badge">Direct Figma Actions</span>
+      </div>
+      <div class="tool-grid">
+        <button class="tool-btn" type="button" data-tool-action="create_frame" data-tool-params='{"name":"Desktop Canvas","width":1440,"height":960,"layoutMode":"VERTICAL","itemSpacing":24}'>Create desktop frame</button>
+        <button class="tool-btn" type="button" data-tool-action="create_component" data-tool-params='{"name":"Primary Button","width":180,"height":52,"cornerRadius":12,"fillR":0.231,"fillG":0.51,"fillB":0.965}'>Create button component</button>
+        <button class="tool-btn" type="button" data-tool-action="create_line" data-tool-params='{"name":"Divider","length":320,"strokeWeight":1,"strokeR":0.894,"strokeG":0.894,"strokeB":0.906}'>Create divider line</button>
+        <button class="tool-btn" type="button" data-tool-action="create_polygon" data-tool-params='{"name":"Hex Shape","sides":6,"width":120,"height":120,"fillR":0.231,"fillG":0.51,"fillB":0.965}'>Create polygon shape</button>
+        <button class="tool-btn" type="button" data-tool-action="create_star" data-tool-params='{"name":"Accent Star","points":5,"width":120,"height":120,"fillR":1,"fillG":0.62,"fillB":0.26}'>Create star accent</button>
+        <button class="tool-btn" type="button" data-tool-action="set_auto_layout" data-tool-params='{"layoutMode":"VERTICAL","itemSpacing":16,"paddingTop":24,"paddingRight":24,"paddingBottom":24,"paddingLeft":24}'>Auto-layout selection</button>
+      </div>
+      <div id="toolFeedback" class="tool-feedback"></div>
+    </section>
+  </div>
+  <script src="./dist/ui.js"></script>
+</body>
+</html>

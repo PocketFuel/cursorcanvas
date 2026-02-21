@@ -1,0 +1,14 @@
+{
+  "name": "figma-design-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/code.ts --bundle --outfile=dist/code.js --format=iife --target=es2015 && esbuild src/ui.ts --bundle --outfile=dist/ui.js --format=iife --target=es2015 && node scripts/inline-ui.js",
+    "watch": "esbuild src/code.ts --bundle --outfile=dist/code.js --format=iife --target=es2015 --watch & esbuild src/ui.ts --bundle --outfile=dist/ui.js --format=iife --target=es2015 --watch"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.102.0",
+    "esbuild": "^0.24.0",
+    "typescript": "^5.7.0"
+  }
+}

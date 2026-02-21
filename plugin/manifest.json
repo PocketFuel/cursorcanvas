@@ -1,0 +1,46 @@
+{
+  "name": "CursorCanvas",
+  "id": "1605778494349465941",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "capabilities": [],
+  "enableProposedApi": false,
+  "documentAccess": "dynamic-page",
+  "editorType": [
+    "figma"
+  ],
+  "ui": "dist/figma-design-ui.html",
+  "networkAccess": {
+    "allowedDomains": [
+      "none"
+    ],
+    "devAllowedDomains": [
+      "http://localhost:3055",
+      "http://localhost:3056",
+      "http://localhost:3057",
+      "http://localhost:3058",
+      "http://localhost:3059",
+      "http://localhost:3060",
+      "http://localhost:3061",
+      "http://localhost:3062",
+      "http://localhost:3063",
+      "http://localhost:3064",
+      "http://localhost:3065",
+      "http://localhost:3066",
+      "http://localhost:3067",
+      "http://localhost:3068",
+      "http://localhost:3069",
+      "http://localhost:3070",
+      "http://localhost:3071",
+      "http://localhost:3072",
+      "http://localhost:3073",
+      "http://localhost:3074",
+      "http://localhost:3075",
+      "http://localhost:3076",
+      "http://localhost:3077",
+      "http://localhost:3078",
+      "http://localhost:3079",
+      "http://localhost:3080"
+    ]
+  }
+}

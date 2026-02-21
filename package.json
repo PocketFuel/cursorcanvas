@@ -1,0 +1,20 @@
+{
+  "name": "figma-design-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Chat in Cursor or Lovable. Design in Figma.",
+  "scripts": {
+    "build": "npm run build --workspaces",
+    "test": "npm run build --workspaces",
+    "plugin:build": "npm run build -w plugin",
+    "plugin:watch": "npm run watch -w plugin",
+    "server:build": "npm run build -w server",
+    "server:start": "npm run start -w server",
+    "dev": "pnpm run plugin:watch",
+    "dev:standalone": "npm run server:build && pnpm run plugin:watch & pnpm run server:start"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "workspaces": ["plugin", "server"]
+}

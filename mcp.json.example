@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "figma-design": {
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/figma-design-mcp/server/dist/index.js"]
+    }
+  }
+}
