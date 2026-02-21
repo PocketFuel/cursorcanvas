@@ -411,6 +411,15 @@ async function handleCommand(
       };
     }
 
+    case "open_external_url": {
+      const url = stringParam(params, "url");
+      if (!url) {
+        throw new Error("url is required.");
+      }
+      await figma.openExternal(url);
+      return { ok: true, url };
+    }
+
     default:
       throw new Error(`Unknown tool: ${tool}`);
   }

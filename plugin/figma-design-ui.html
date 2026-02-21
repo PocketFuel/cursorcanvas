@@ -6,24 +6,42 @@
   <meta http-equiv="Feature-Policy" content="camera 'none'; microphone 'none'; clipboard-write 'none'; display-capture 'none'">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    :root {
-      --bg-a: #081426;
-      --bg-b: #11223b;
-      --panel-bg: rgba(13, 28, 46, 0.88);
-      --panel-stroke: rgba(149, 182, 216, 0.2);
-      --text: #ecf4ff;
-      --muted: #9db2ca;
-      --accent: #28d1a7;
-      --accent-strong: #17b58e;
-      --accent-alt: #ff9e42;
-      --danger: #ff838e;
-      --ok: #79e6bf;
-      --warn: #ffd27f;
-      --input-bg: rgba(5, 13, 24, 0.52);
-      --shadow: 0 16px 30px rgba(0, 0, 0, 0.34);
+    :root,
+    body.theme-dark {
+      --bg-a: #0f0f10;
+      --bg-b: #1a1a1b;
+      --panel-bg: rgba(18, 18, 19, 0.9);
+      --panel-stroke: rgba(130, 130, 134, 0.26);
+      --text: #efefef;
+      --muted: #a1a1a6;
+      --accent: #d7d7da;
+      --accent-strong: #f2f2f5;
+      --accent-alt: #b5b5b9;
+      --danger: #d88d8d;
+      --ok: #8fb89a;
+      --warn: #bba970;
+      --input-bg: rgba(8, 8, 9, 0.62);
+      --shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
       --radius-lg: 18px;
       --radius-md: 12px;
       --radius-sm: 8px;
+    }
+
+    body.theme-light {
+      --bg-a: #f3f3f4;
+      --bg-b: #e7e7e9;
+      --panel-bg: rgba(255, 255, 255, 0.88);
+      --panel-stroke: rgba(156, 156, 162, 0.26);
+      --text: #1f1f22;
+      --muted: #66666d;
+      --accent: #2a2a2d;
+      --accent-strong: #111114;
+      --accent-alt: #4d4d52;
+      --danger: #a14d4d;
+      --ok: #4f7758;
+      --warn: #8a7640;
+      --input-bg: rgba(243, 243, 245, 0.92);
+      --shadow: 0 14px 26px rgba(38, 38, 43, 0.14);
     }
 
     * {
@@ -38,8 +56,8 @@
       font-size: 12px;
       color: var(--text);
       background:
-        radial-gradient(circle at 12% 8%, rgba(40, 209, 167, 0.2), transparent 34%),
-        radial-gradient(circle at 88% 12%, rgba(255, 158, 66, 0.24), transparent 30%),
+        radial-gradient(circle at 12% 8%, rgba(210, 210, 216, 0.14), transparent 34%),
+        radial-gradient(circle at 88% 12%, rgba(141, 141, 148, 0.16), transparent 30%),
         linear-gradient(160deg, var(--bg-a), var(--bg-b));
     }
 
@@ -52,10 +70,10 @@
     .hero {
       padding: 14px;
       border-radius: var(--radius-lg);
-      border: 1px solid rgba(147, 189, 225, 0.27);
+      border: 1px solid rgba(141, 141, 148, 0.3);
       background:
-        linear-gradient(135deg, rgba(30, 53, 79, 0.78), rgba(20, 35, 57, 0.86)),
-        linear-gradient(90deg, rgba(40, 209, 167, 0.1), rgba(255, 158, 66, 0.09));
+        linear-gradient(135deg, rgba(36, 36, 38, 0.78), rgba(20, 20, 22, 0.86)),
+        linear-gradient(90deg, rgba(180, 180, 186, 0.11), rgba(122, 122, 128, 0.08));
       box-shadow: var(--shadow);
       position: relative;
       overflow: hidden;
@@ -95,9 +113,9 @@
       letter-spacing: 0.08em;
       padding: 5px 8px;
       border-radius: 999px;
-      background: rgba(40, 209, 167, 0.18);
-      border: 1px solid rgba(119, 242, 202, 0.42);
-      color: #d8fff3;
+      background: rgba(145, 145, 150, 0.18);
+      border: 1px solid rgba(177, 177, 183, 0.42);
+      color: var(--text);
       white-space: nowrap;
     }
 
@@ -106,13 +124,13 @@
       height: 7px;
       border-radius: 50%;
       background: var(--accent);
-      box-shadow: 0 0 0 6px rgba(40, 209, 167, 0.18);
+      box-shadow: 0 0 0 6px rgba(180, 180, 187, 0.22);
     }
 
     .hero-text {
       margin: 10px 0 0;
       line-height: 1.45;
-      color: #c7d9ee;
+      color: var(--muted);
       max-width: 96%;
     }
 
@@ -146,7 +164,7 @@
       font-weight: 700;
       letter-spacing: 0.03em;
       text-transform: uppercase;
-      color: #d5e5f7;
+      color: var(--text);
     }
 
     label {
@@ -162,7 +180,7 @@
     textarea {
       width: 100%;
       border-radius: var(--radius-md);
-      border: 1px solid rgba(152, 188, 223, 0.28);
+      border: 1px solid rgba(144, 144, 150, 0.28);
       background: var(--input-bg);
       color: var(--text);
       padding: 9px 11px;
@@ -173,15 +191,15 @@
 
     input[type="text"]::placeholder,
     textarea::placeholder {
-      color: #7f97b2;
+      color: var(--muted);
     }
 
     input[type="text"]:focus,
     textarea:focus {
       outline: none;
-      border-color: rgba(121, 230, 191, 0.8);
-      box-shadow: 0 0 0 3px rgba(40, 209, 167, 0.23);
-      background: rgba(9, 20, 34, 0.75);
+      border-color: rgba(186, 186, 192, 0.92);
+      box-shadow: 0 0 0 3px rgba(145, 145, 152, 0.24);
+      background: rgba(27, 27, 30, 0.85);
     }
 
     textarea {
@@ -220,25 +238,25 @@
 
     .btn-primary {
       background: linear-gradient(130deg, var(--accent), var(--accent-strong));
-      color: #04251e;
+      color: var(--bg-a);
       min-width: 106px;
     }
 
     .btn-primary:hover:not(:disabled) {
       transform: translateY(-1px);
-      background: linear-gradient(130deg, #47e8bf, #1ec49a);
+      background: linear-gradient(130deg, #ececef, #d6d6da);
     }
 
     .btn-ghost {
-      background: rgba(16, 32, 52, 0.9);
-      border-color: rgba(133, 175, 214, 0.28);
-      color: #cce1f8;
+      background: rgba(36, 36, 40, 0.9);
+      border-color: rgba(136, 136, 143, 0.28);
+      color: var(--text);
     }
 
     .btn-ghost:hover:not(:disabled) {
       transform: translateY(-1px);
-      border-color: rgba(255, 158, 66, 0.8);
-      color: #ffe6cf;
+      border-color: rgba(190, 190, 196, 0.8);
+      color: var(--text);
     }
 
     .status {
@@ -263,36 +281,36 @@
     }
 
     .status.disconnected {
-      color: #ffc0c6;
-      background: rgba(143, 37, 53, 0.32);
-      border: 1px solid rgba(255, 131, 142, 0.36);
+      color: var(--danger);
+      background: rgba(147, 77, 77, 0.18);
+      border: 1px solid rgba(190, 110, 110, 0.44);
     }
 
     .status.disconnected::before {
       background: var(--danger);
-      box-shadow: 0 0 0 4px rgba(255, 131, 142, 0.18);
+      box-shadow: 0 0 0 4px rgba(166, 97, 97, 0.24);
     }
 
     .status.connected {
-      color: #ccffe9;
-      background: rgba(33, 105, 78, 0.34);
-      border: 1px solid rgba(121, 230, 191, 0.35);
+      color: var(--ok);
+      background: rgba(86, 120, 94, 0.18);
+      border: 1px solid rgba(129, 171, 137, 0.44);
     }
 
     .status.connected::before {
       background: var(--ok);
-      box-shadow: 0 0 0 4px rgba(121, 230, 191, 0.18);
+      box-shadow: 0 0 0 4px rgba(129, 171, 137, 0.24);
     }
 
     .status.connecting {
-      color: #ffe3b7;
-      background: rgba(122, 90, 23, 0.32);
-      border: 1px solid rgba(255, 210, 127, 0.35);
+      color: var(--warn);
+      background: rgba(143, 120, 66, 0.18);
+      border: 1px solid rgba(189, 164, 95, 0.44);
     }
 
     .status.connecting::before {
       background: var(--warn);
-      box-shadow: 0 0 0 4px rgba(255, 210, 127, 0.2);
+      box-shadow: 0 0 0 4px rgba(189, 164, 95, 0.24);
     }
 
     .error {
@@ -318,9 +336,9 @@
     .chip {
       width: 100%;
       text-align: left;
-      background: rgba(14, 28, 46, 0.92);
-      border-color: rgba(134, 175, 212, 0.3);
-      color: #d8e8fa;
+      background: rgba(22, 22, 24, 0.92);
+      border-color: rgba(136, 136, 143, 0.3);
+      color: var(--text);
       font-size: 10px;
       font-weight: 600;
       padding: 8px 9px;
@@ -328,8 +346,8 @@
     }
 
     .chip:hover {
-      border-color: rgba(121, 230, 191, 0.88);
-      color: #e8fff6;
+      border-color: rgba(185, 185, 192, 0.88);
+      color: var(--text);
       transform: translateY(-1px);
     }
 
@@ -358,24 +376,24 @@
     .tool-btn {
       text-align: left;
       min-height: 50px;
-      background: linear-gradient(140deg, rgba(20, 37, 60, 0.96), rgba(12, 25, 42, 0.96));
-      border-color: rgba(133, 175, 214, 0.26);
-      color: #d6e8fb;
+      background: linear-gradient(140deg, rgba(29, 29, 31, 0.96), rgba(16, 16, 18, 0.96));
+      border-color: rgba(137, 137, 143, 0.26);
+      color: var(--text);
       line-height: 1.25;
       border-radius: 12px;
       padding: 9px;
     }
 
     .tool-btn:hover:not(:disabled) {
-      border-color: rgba(255, 158, 66, 0.85);
-      color: #ffedda;
+      border-color: rgba(182, 182, 189, 0.85);
+      color: var(--text);
       transform: translateY(-1px);
     }
 
     .tool-feedback {
       min-height: 14px;
       margin-top: 8px;
-      color: #9de5ff;
+      color: var(--muted);
     }
 
     .hidden {
@@ -422,7 +440,10 @@
     <section class="hero">
       <div class="hero-top">
         <h1 class="brand">CursorCanvas Studio</h1>
-        <span class="badge"><span class="badge-dot"></span>Agent Design Mode</span>
+        <div class="row">
+          <button id="themeToggle" class="btn-ghost" type="button">Toggle Theme</button>
+          <span class="badge"><span class="badge-dot"></span>Agent Design Mode</span>
+        </div>
       </div>
       <p class="hero-text">Build richer Figma outcomes with structured prompts, reusable design recipes, and one-click tools your agent can execute immediately.</p>
     </section>
@@ -439,6 +460,21 @@
       <div id="status" class="status disconnected">Disconnected</div>
       <div id="error" class="error"></div>
       <p class="hint">Open this repo in Cursor/Lovable/Codex with MCP enabled, then connect here. If WebSocket fails, HTTP fallback is automatic.</p>
+    </section>
+
+    <section class="panel">
+      <div class="panel-head">
+        <h2 class="panel-title">Cursor Agent</h2>
+      </div>
+      <label for="cursorProjectPath">Project path to open in Cursor</label>
+      <input type="text" id="cursorProjectPath" placeholder="/Users/you/project">
+      <label for="cursorKickoff">Design training + kickoff prompt</label>
+      <textarea id="cursorKickoff" placeholder="How the agent should design, what tools to use, and what to build next."></textarea>
+      <div class="row">
+        <button id="openCursorAgent" class="btn-primary grow" type="button">Open Cursor Agent</button>
+      </div>
+      <p class="hint">This opens Cursor via `cursor://`, stores your kickoff prompt for MCP, and gives a launch message you can paste if deep-link chat handoff is not supported.</p>
+      <div id="cursorFeedback" class="tool-feedback"></div>
     </section>
 
     <section class="panel">

@@ -13,6 +13,11 @@ const sendPromptBtn = byId<HTMLButtonElement>("sendPrompt");
 const sendSuccessEl = byId<HTMLParagraphElement>("sendSuccess");
 const promptCounterEl = byId<HTMLSpanElement>("promptCounter");
 const toolFeedbackEl = byId<HTMLDivElement>("toolFeedback");
+const cursorProjectPathInput = byId<HTMLInputElement>("cursorProjectPath");
+const cursorKickoffInput = byId<HTMLTextAreaElement>("cursorKickoff");
+const openCursorAgentBtn = byId<HTMLButtonElement>("openCursorAgent");
+const cursorFeedbackEl = byId<HTMLDivElement>("cursorFeedback");
+const themeToggleBtn = byId<HTMLButtonElement>("themeToggle");
 
 const clearPromptBtn = document.getElementById("clearPrompt") as HTMLButtonElement | null;
 const templateBtns = Array.from(document.querySelectorAll<HTMLButtonElement>(".template-btn"));
@@ -39,6 +44,15 @@ const DEFAULT_WS_URL = "ws://localhost:3055";
 const LOCAL_HTTP_MIN = 3056;
 const LOCAL_HTTP_MAX = 3080;
 const PORT_SCAN_TIMEOUT_MS = 420;
+const THEME_STORAGE_KEY = "cursorcanvas_theme";
+
+const defaultCursorKickoff = [
+  "You are my CursorCanvas design agent working through Cursor with the CursorCanvas MCP tools.",
+  "Always design with strong visual hierarchy, deliberate spacing rhythm, clear typography, and reusable components.",
+  "Prefer grayscale-first UI foundations, then add color intentionally and sparingly.",
+  "When creating Figma output, use auto-layout, semantic layer naming, and production-ready component structure.",
+  "Start by reading the latest Figma prompt via get_figma_prompt, then execute it precisely.",
+].join("\n");
 
 interface WsAddress {
   protocol: "ws" | "wss";
@@ -93,6 +107,11 @@ function setError(msg: string) {
   errorEl.textContent = msg;
 }
 
+function setCursorFeedback(msg: string, isError = false) {
+  cursorFeedbackEl.textContent = msg;
+  cursorFeedbackEl.style.color = isError ? "#ff8b8b" : "";
+}
+
 function showSendSuccess() {
   sendSuccessEl.classList.remove("hidden");
   if (sendSuccessTimeout) clearTimeout(sendSuccessTimeout);
@@ -104,12 +123,19 @@ function showSendSuccess() {
 
 function showToolFeedback(msg: string, isError = false) {
   toolFeedbackEl.textContent = msg;
-  toolFeedbackEl.style.color = isError ? "#ff97a0" : "#9de5ff";
+  toolFeedbackEl.style.color = isError ? "#d88d8d" : "";
   if (toolFeedbackTimeout) clearTimeout(toolFeedbackTimeout);
   toolFeedbackTimeout = setTimeout(() => {
     toolFeedbackEl.textContent = "";
     toolFeedbackTimeout = null;
   }, 7000);
+}
+
+function applyTheme(theme: "dark" | "light") {
+  document.body.classList.remove("theme-dark", "theme-light");
+  document.body.classList.add(theme === "light" ? "theme-light" : "theme-dark");
+  themeToggleBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
+  localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
 function updatePromptCounter() {
@@ -381,6 +407,13 @@ async function connect() {
   };
 }
 
+function buildCursorUrl(projectPath: string): string {
+  const trimmed = projectPath.trim();
+  if (!trimmed) return "cursor://";
+  const normalized = trimmed.replace(/^file:\/\//, "");
+  return normalized.startsWith("/") ? `cursor://file${normalized}` : `cursor://file/${normalized}`;
+}
+
 async function sendPromptToCursor() {
   const text = promptInput.value.trim();
   if (!text) return;
@@ -423,6 +456,45 @@ async function sendPromptToCursor() {
   }
 
   setError("Connect first to send prompts to your agent.");
+}
+
+async function sendKickoffToCursorCanvas(text: string): Promise<boolean> {
+  if (!text.trim()) return true;
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: "figma_prompt", text }));
+    return true;
+  }
+  if (httpMode && httpBaseUrl) {
+    const res = await fetch(httpBaseUrl + "/prompt", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+    return res.ok;
+  }
+  return false;
+}
+
+async function openCursorAgent() {
+  const kickoff = cursorKickoffInput.value.trim();
+  const projectPath = cursorProjectPathInput.value.trim();
+  const cursorUrl = buildCursorUrl(projectPath);
+  setCursorFeedback("");
+  setError("");
+
+  try {
+    const queued = await sendKickoffToCursorCanvas(kickoff);
+    if (!queued) {
+      setCursorFeedback("Connect CursorCanvas first so kickoff instructions are available to the agent.", true);
+      return;
+    }
+    await callPluginCommand("open_external_url", { url: cursorUrl }, 10000);
+    setCursorFeedback("Opened Cursor. In chat, start with: 'Do the Figma prompt'.");
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    setCursorFeedback(`Could not open Cursor URL (${msg}). Open Cursor manually, then say: Do the Figma prompt`, true);
+  }
 }
 
 function insertTemplate(templateName: string) {
@@ -518,6 +590,28 @@ for (const btn of toolBtns) {
   btn.addEventListener("click", () => {
     runQuickTool(btn);
   });
+}
+
+themeToggleBtn.addEventListener("click", () => {
+  const current = document.body.classList.contains("theme-light") ? "light" : "dark";
+  applyTheme(current === "light" ? "dark" : "light");
+});
+
+openCursorAgentBtn.addEventListener("click", () => {
+  void openCursorAgent();
+});
+
+cursorKickoffInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+    e.preventDefault();
+    void openCursorAgent();
+  }
+});
+
+const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
+applyTheme(storedTheme === "light" ? "light" : "dark");
+if (!cursorKickoffInput.value.trim()) {
+  cursorKickoffInput.value = defaultCursorKickoff;
 }
 
 updatePromptCounter();

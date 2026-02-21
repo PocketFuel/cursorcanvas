@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import * as http from "http";
+import * as net from "net";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -94,6 +95,20 @@ let wss: WebSocketServer | null = null;
 let activeWsPort = FIGSOR_PORT_INIT;
 let activeHttpPort = FIGSOR_PORT_INIT + 1;
 
+function probePort(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.unref();
+    tester.once("error", (err: NodeJS.ErrnoException) => {
+      if (err.code === "EADDRINUSE") resolve(false);
+      else resolve(false);
+    });
+    tester.listen(port, "127.0.0.1", () => {
+      tester.close(() => resolve(true));
+    });
+  });
+}
+
 function tryPortPair(wsPort: number, httpPort: number): void {
   if (httpPort > FIGSOR_PORT_MAX) {
     console.error("No ports available in range. Stop other processes using 3055–3080.");
@@ -107,39 +122,54 @@ function tryPortPair(wsPort: number, httpPort: number): void {
       wss.close();
       wss = null;
     }
-    wss = new WebSocketServer({ port: wsPort });
-    // Attach error first so EADDRINUSE is handled before any async emit
-    wss.on("error", (err: NodeJS.ErrnoException) => {
-      if (err.code === "EADDRINUSE") {
+    void probePort(wsPort).then((available) => {
+      if (!available) {
         httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
-      } else throw err;
-    });
-    wss.on("connection", (ws: WebSocket) => {
-      pluginSocket = ws;
-      ws.on("close", () => {
-        if (pluginSocket === ws) pluginSocket = null;
-      });
-      ws.on("message", (data: Buffer | Buffer[] | ArrayBuffer) => {
-        try {
-          const msg = JSON.parse(data.toString());
-          if (msg.type === "debug") return;
-          if (msg.type === "figma_prompt" && typeof msg.text === "string") {
-            lastFigmaPrompt = msg.text.trim() || null;
-            return;
-          }
-          if (msg.id && pending.has(msg.id)) {
-            const p = pending.get(msg.id)!;
-            pending.delete(msg.id);
-            if (msg.error) p.reject(new Error(msg.error));
-            else p.resolve(msg.result);
-          }
-        } catch {
-          // ignore parse errors
+        return;
+      }
+      try {
+        wss = new WebSocketServer({ port: wsPort });
+      } catch (err) {
+        const e = err as NodeJS.ErrnoException;
+        if (e.code === "EADDRINUSE") {
+          httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
+          return;
         }
+        throw err;
+      }
+      // Attach error first so EADDRINUSE is handled before any async emit
+      wss.on("error", (err: NodeJS.ErrnoException) => {
+        if (err.code === "EADDRINUSE") {
+          httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
+        } else throw err;
       });
-    });
-    wss.on("listening", () => {
-      console.error(`CursorCanvas: WebSocket port ${wsPort}, HTTP port ${httpPort}. Connect plugin to ws://localhost:${wsPort}`);
+      wss.on("connection", (ws: WebSocket) => {
+        pluginSocket = ws;
+        ws.on("close", () => {
+          if (pluginSocket === ws) pluginSocket = null;
+        });
+        ws.on("message", (data: Buffer | Buffer[] | ArrayBuffer) => {
+          try {
+            const msg = JSON.parse(data.toString());
+            if (msg.type === "debug") return;
+            if (msg.type === "figma_prompt" && typeof msg.text === "string") {
+              lastFigmaPrompt = msg.text.trim() || null;
+              return;
+            }
+            if (msg.id && pending.has(msg.id)) {
+              const p = pending.get(msg.id)!;
+              pending.delete(msg.id);
+              if (msg.error) p.reject(new Error(msg.error));
+              else p.resolve(msg.result);
+            }
+          } catch {
+            // ignore parse errors
+          }
+        });
+      });
+      wss.on("listening", () => {
+        console.error(`CursorCanvas: WebSocket port ${wsPort}, HTTP port ${httpPort}. Connect plugin to ws://localhost:${wsPort}`);
+      });
     });
   });
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
@@ -178,7 +208,7 @@ function sendToPlugin(id: string, tool: string, params: Record<string, unknown>)
 
 const server = new Server(
   {
-    name: "figma-design-mcp",
+    name: "cursorcanvas-mcp",
     version: "0.1.0",
   },
   {
