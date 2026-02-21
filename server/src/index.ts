@@ -676,92 +676,133 @@ const httpServer = http.createServer(async (req, res) => {
   writeJson(res, 404, { error: "Not found" });
 });
 
+let portBindAttemptCounter = 0;
+let portRetryPending = false;
+
+function schedulePortRetry(wsPort: number, httpPort: number): void {
+  if (portRetryPending) return;
+  portRetryPending = true;
+
+  const runRetry = () => {
+    portRetryPending = false;
+    tryPortPair(wsPort, httpPort);
+  };
+
+  if (httpServer.listening) {
+    httpServer.close(() => runRetry());
+    return;
+  }
+
+  setImmediate(runRetry);
+}
+
 function tryPortPair(wsPort: number, httpPort: number): void {
+  const bindAttemptId = ++portBindAttemptCounter;
+
   if (httpPort > FIGSOR_PORT_MAX) {
     console.error("No ports available in range. Stop other processes using 3055-3080.");
     process.exit(1);
   }
 
   httpServer.removeAllListeners("error");
-  httpServer.listen(httpPort, () => {
-    activeWsPort = wsPort;
-    activeHttpPort = httpPort;
-
-    if (wss) {
-      wss.close();
-      wss = null;
-    }
-
-    void probePort(wsPort).then((available) => {
-      if (!available) {
-        httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
-        return;
-      }
-
-      try {
-        wss = new WebSocketServer({ port: wsPort });
-      } catch (err) {
-        const e = err as NodeJS.ErrnoException;
-        if (e.code === "EADDRINUSE") {
-          httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
-          return;
-        }
-        throw err;
-      }
-
-      wss.on("error", (err: NodeJS.ErrnoException) => {
-        if (err.code === "EADDRINUSE") {
-          httpServer.close(() => tryPortPair(wsPort + 2, httpPort + 2));
-        } else {
-          throw err;
-        }
-      });
-
-      wss.on("connection", (ws: WebSocket) => {
-        pluginSocket = ws;
-
-        ws.on("close", () => {
-          if (pluginSocket === ws) pluginSocket = null;
-        });
-
-        ws.on("message", (data: Buffer | Buffer[] | ArrayBuffer) => {
-          try {
-            const msg = JSON.parse(data.toString()) as {
-              type?: string;
-              text?: string;
-              id?: string;
-              result?: unknown;
-              error?: string;
-            };
-
-            if (msg.type === "figma_prompt" && typeof msg.text === "string") {
-              lastFigmaPrompt = msg.text.trim() || null;
-              return;
-            }
-            if (msg.id && pending.has(msg.id)) {
-              const request = pending.get(msg.id)!;
-              pending.delete(msg.id);
-              if (msg.error) request.reject(new Error(msg.error));
-              else request.resolve(msg.result);
-            }
-          } catch {
-            // Ignore malformed message.
-          }
-        });
-      });
-
-      wss.on("listening", () => {
-        console.error(
-          `CursorCanvas: WebSocket port ${wsPort}, HTTP port ${httpPort}. Connect plugin to ws://localhost:${wsPort}`
-        );
-      });
-    });
-  });
 
   httpServer.on("error", (err: NodeJS.ErrnoException) => {
-    if (err.code === "EADDRINUSE") tryPortPair(wsPort + 2, httpPort + 2);
+    if (bindAttemptId !== portBindAttemptCounter) return;
+    if (err.code === "EADDRINUSE") schedulePortRetry(wsPort + 2, httpPort + 2);
     else throw err;
   });
+
+  try {
+    httpServer.listen(httpPort, () => {
+      if (bindAttemptId !== portBindAttemptCounter) return;
+
+      activeWsPort = wsPort;
+      activeHttpPort = httpPort;
+
+      if (wss) {
+        wss.close();
+        wss = null;
+      }
+
+      void probePort(wsPort).then((available) => {
+        if (bindAttemptId !== portBindAttemptCounter) return;
+
+        if (!available) {
+          schedulePortRetry(wsPort + 2, httpPort + 2);
+          return;
+        }
+
+        try {
+          wss = new WebSocketServer({ port: wsPort });
+        } catch (err) {
+          const e = err as NodeJS.ErrnoException;
+          if (e.code === "EADDRINUSE") {
+            schedulePortRetry(wsPort + 2, httpPort + 2);
+            return;
+          }
+          throw err;
+        }
+
+        wss.on("error", (err: NodeJS.ErrnoException) => {
+          if (bindAttemptId !== portBindAttemptCounter) return;
+
+          if (err.code === "EADDRINUSE") {
+            schedulePortRetry(wsPort + 2, httpPort + 2);
+          } else {
+            throw err;
+          }
+        });
+
+        wss.on("connection", (ws: WebSocket) => {
+          pluginSocket = ws;
+
+          ws.on("close", () => {
+            if (pluginSocket === ws) pluginSocket = null;
+          });
+
+          ws.on("message", (data: Buffer | Buffer[] | ArrayBuffer) => {
+            try {
+              const msg = JSON.parse(data.toString()) as {
+                type?: string;
+                text?: string;
+                id?: string;
+                result?: unknown;
+                error?: string;
+              };
+
+              if (msg.type === "figma_prompt" && typeof msg.text === "string") {
+                lastFigmaPrompt = msg.text.trim() || null;
+                return;
+              }
+              if (msg.id && pending.has(msg.id)) {
+                const request = pending.get(msg.id)!;
+                pending.delete(msg.id);
+                if (msg.error) request.reject(new Error(msg.error));
+                else request.resolve(msg.result);
+              }
+            } catch {
+              // Ignore malformed message.
+            }
+          });
+        });
+
+        wss.on("listening", () => {
+          if (bindAttemptId !== portBindAttemptCounter) return;
+
+          console.error(
+            `CursorCanvas: WebSocket port ${wsPort}, HTTP port ${httpPort}. Connect plugin to ws://localhost:${wsPort}`
+          );
+        });
+      });
+    });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === "ERR_SERVER_ALREADY_LISTEN") {
+      schedulePortRetry(wsPort, httpPort);
+      return;
+    }
+    throw err;
+  }
 }
 
 tryPortPair(FIGSOR_PORT_INIT, FIGSOR_PORT_INIT + 1);
