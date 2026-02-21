@@ -10,6 +10,7 @@ import {
 import { WebSocketServer, type WebSocket } from "ws";
 
 const FIGSOR_PORT_INIT = parseInt(process.env.FIGSOR_PORT ?? "3055", 10);
+const FIGSOR_PORT_MAX = 3080;
 
 let pluginSocket: WebSocket | null = null;
 const pending = new Map<
@@ -24,6 +25,18 @@ let lastFigmaPrompt: string | null = null;
 
 const httpServer = http.createServer((req, res) => {
   const url = req.url ?? "";
+  if (req.method === "GET" && url === "/health") {
+    res.writeHead(200, { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*" });
+    res.end(
+      JSON.stringify({
+        ok: true,
+        wsPort: activeWsPort,
+        httpPort: activeHttpPort,
+        pluginConnected: pluginSocket != null && pluginSocket.readyState === 1,
+      })
+    );
+    return;
+  }
   if (req.method === "GET" && (url === "/poll" || url === "/")) {
     if (httpCommandQueue.length > 0) {
       const cmd = httpCommandQueue.shift()!;
@@ -78,14 +91,18 @@ const httpServer = http.createServer((req, res) => {
 });
 
 let wss: WebSocketServer | null = null;
+let activeWsPort = FIGSOR_PORT_INIT;
+let activeHttpPort = FIGSOR_PORT_INIT + 1;
 
 function tryPortPair(wsPort: number, httpPort: number): void {
-  if (httpPort > 3080) {
+  if (httpPort > FIGSOR_PORT_MAX) {
     console.error("No ports available in range. Stop other processes using 3055–3080.");
     process.exit(1);
   }
   httpServer.removeAllListeners("error");
   httpServer.listen(httpPort, () => {
+    activeWsPort = wsPort;
+    activeHttpPort = httpPort;
     if (wss) {
       wss.close();
       wss = null;

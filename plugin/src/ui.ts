@@ -35,6 +35,24 @@ let httpMode = false;
 let httpBaseUrl = "";
 let httpAbort: AbortController | null = null;
 
+const DEFAULT_WS_URL = "ws://localhost:3055";
+const LOCAL_HTTP_MIN = 3056;
+const LOCAL_HTTP_MAX = 3080;
+const PORT_SCAN_TIMEOUT_MS = 420;
+
+interface WsAddress {
+  protocol: "ws" | "wss";
+  host: string;
+  port: number;
+}
+
+interface HealthResponse {
+  ok?: boolean;
+  wsPort?: number;
+  httpPort?: number;
+  pluginConnected?: boolean;
+}
+
 const templates: Record<string, string> = {
   landing: [
     "Design a high-conversion landing hero in Figma.",
@@ -147,6 +165,69 @@ function wsUrlToHttpPollUrl(wsUrl: string): string {
   return `http://${m[2]}:${port}`;
 }
 
+function parseWsAddress(input: string): WsAddress | null {
+  const m = input.match(/^(wss?):\/\/([^:/]+)(?::(\d+))?/i);
+  if (!m) return null;
+  const protocol = m[1].toLowerCase() === "wss" ? "wss" : "ws";
+  const host = m[2].toLowerCase();
+  const port = m[3] ? parseInt(m[3], 10) : protocol === "wss" ? 443 : 3055;
+  if (!Number.isFinite(port)) return null;
+  return { protocol, host, port };
+}
+
+function isLocalhostHost(host: string): boolean {
+  return host === "localhost" || host === "127.0.0.1";
+}
+
+function buildWsUrl(protocol: "ws" | "wss", host: string, port: number): string {
+  return `${protocol}://${host}:${port}`;
+}
+
+function buildHttpUrl(host: string, port: number): string {
+  return `http://${host}:${port}`;
+}
+
+async function fetchJsonWithTimeout<T>(url: string, timeoutMs: number): Promise<T | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) return null;
+    return (await res.json()) as T;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function discoverLocalWsUrl(seedWsUrl: string): Promise<string | null> {
+  const parsed = parseWsAddress(seedWsUrl);
+  if (!parsed || !isLocalhostHost(parsed.host)) return null;
+
+  const orderedHttpPorts: number[] = [];
+  const preferredHttpPort = parsed.port + 1;
+  if (preferredHttpPort >= LOCAL_HTTP_MIN && preferredHttpPort <= LOCAL_HTTP_MAX) {
+    orderedHttpPorts.push(preferredHttpPort);
+  }
+  for (let port = LOCAL_HTTP_MIN; port <= LOCAL_HTTP_MAX; port += 2) {
+    if (port !== preferredHttpPort) orderedHttpPorts.push(port);
+  }
+
+  for (const httpPort of orderedHttpPorts) {
+    const health = await fetchJsonWithTimeout<HealthResponse>(
+      `${buildHttpUrl(parsed.host, httpPort)}/health`,
+      PORT_SCAN_TIMEOUT_MS
+    );
+    if (!health || !health.ok) continue;
+    const wsPort = typeof health.wsPort === "number" ? health.wsPort : httpPort - 1;
+    if (wsPort > 0) {
+      return buildWsUrl(parsed.protocol, parsed.host, wsPort);
+    }
+  }
+  return null;
+}
+
 async function runHttpPollLoop(baseUrl: string) {
   while (httpMode && httpAbort) {
     try {
@@ -206,8 +287,20 @@ function stopHttpMode() {
   }
 }
 
-function connect() {
-  const url = urlInput.value.trim() || "ws://localhost:3055";
+async function connect() {
+  setStatus("connecting", "Scanning local MCP ports...");
+  setError("");
+  connectBtn.disabled = true;
+
+  const initialUrl = urlInput.value.trim() || DEFAULT_WS_URL;
+  const discoveredUrl = await discoverLocalWsUrl(initialUrl);
+  const url = discoveredUrl ?? initialUrl;
+
+  if (discoveredUrl && discoveredUrl !== initialUrl) {
+    urlInput.value = discoveredUrl;
+    showToolFeedback(`Discovered MCP server at ${discoveredUrl}`);
+  }
+
   manualDisconnect = false;
   stopHttpMode();
 
@@ -216,8 +309,6 @@ function connect() {
   }
 
   setStatus("connecting", "Connecting...");
-  setError("");
-  connectBtn.disabled = true;
 
   ws = new WebSocket(url);
 
@@ -264,7 +355,7 @@ function connect() {
   };
 
   ws.onerror = () => {
-    setError("Connection error.");
+    setError("Connection error. If Cursor picked a new port, click Connect again to auto-discover.");
   };
 
   ws.onmessage = async (event: MessageEvent) => {
@@ -324,7 +415,9 @@ async function sendPromptToCursor() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(`Cannot reach server (${msg}). Open this project in Cursor to start MCP.`);
+      setError(
+        `Cannot reach ${httpBaseUrl} (${msg}). Click Connect again to auto-discover active MCP port, or use Cursor log URL.`
+      );
     }
     return;
   }
@@ -386,7 +479,7 @@ connectBtn.addEventListener("click", () => {
     manualDisconnect = true;
     ws.close();
   } else {
-    connect();
+    void connect();
   }
 });
 
