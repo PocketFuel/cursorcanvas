@@ -376,6 +376,14 @@ function getChatBaseUrl(): string {
   return wsUrlToHttpPollUrl(urlInput.value.trim() || DEFAULT_WS_URL);
 }
 
+async function postChat(body: unknown, baseUrl: string): Promise<Response> {
+  return fetch(baseUrl + "/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
 async function sendChat() {
   const text = chatInput.value.trim();
   if (!text) return;
@@ -407,11 +415,28 @@ async function sendChat() {
       conversation: chatHistory.slice(-20),
     };
 
-    const res = await fetch(getChatBaseUrl() + "/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    let chatBaseUrl = getChatBaseUrl();
+    let res: Response;
+    try {
+      res = await postChat(body, chatBaseUrl);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      const discoveredUrl = await discoverLocalWsUrl(urlInput.value.trim() || DEFAULT_WS_URL);
+      if (discoveredUrl && discoveredUrl !== urlInput.value.trim()) {
+        urlInput.value = discoveredUrl;
+      }
+      if (discoveredUrl) {
+        chatBaseUrl = wsUrlToHttpPollUrl(discoveredUrl);
+        httpBaseUrl = chatBaseUrl;
+        try {
+          res = await postChat(body, chatBaseUrl);
+        } catch {
+          throw new Error(`${msg} (chat endpoint: ${chatBaseUrl}/chat)`);
+        }
+      } else {
+        throw new Error(`${msg} (chat endpoint: ${chatBaseUrl}/chat)`);
+      }
+    }
 
     const textBody = await res.text();
     let data: ChatResponse | { error?: string };
