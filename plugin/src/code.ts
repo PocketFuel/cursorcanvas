@@ -344,6 +344,14 @@ async function handleCommand(
       text.fontSize = numberParam(params, "fontSize") ?? 16;
       text.x = numberParam(params, "x") ?? 0;
       text.y = numberParam(params, "y") ?? 0;
+      const lineHeightPx = numberParam(params, "lineHeightPx");
+      if (lineHeightPx != null) {
+        text.lineHeight = { unit: "PIXELS", value: Math.max(1, lineHeightPx) };
+      }
+      const letterSpacingPx = numberParam(params, "letterSpacingPx");
+      if (letterSpacingPx != null) {
+        text.letterSpacing = { unit: "PIXELS", value: letterSpacingPx };
+      }
 
       const fill = colorParam(params, "fillR", "fillG", "fillB");
       if (fill) {

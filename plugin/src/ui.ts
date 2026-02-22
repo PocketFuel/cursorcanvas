@@ -28,6 +28,12 @@ const designProfileInput = byId<HTMLTextAreaElement>("designProfile");
 const saveResearchBtn = byId<HTMLButtonElement>("saveResearch");
 const useResearchNowBtn = byId<HTMLButtonElement>("useResearchNow");
 const researchMetaEl = byId<HTMLParagraphElement>("researchMeta");
+const researchFieldsEl = byId<HTMLDivElement>("researchFields");
+const questionnaireMetaEl = byId<HTMLParagraphElement>("questionnaireMeta");
+const generateBriefBtn = byId<HTMLButtonElement>("generateBrief");
+const surpriseBriefBtn = byId<HTMLButtonElement>("surpriseBrief");
+const audienceSelect = byId<HTMLSelectElement>("audienceSelect");
+const complexitySelect = byId<HTMLSelectElement>("complexitySelect");
 const libraryMetaEl = byId<HTMLParagraphElement>("libraryMeta");
 const framePresetSelect = byId<HTMLSelectElement>("framePreset");
 const createMainFrameBtn = byId<HTMLButtonElement>("createMainFrame");
@@ -42,6 +48,10 @@ const typeTabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-
 const typeGroups = Array.from(document.querySelectorAll<HTMLElement>(".type-group"));
 const templateBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-component-template]"));
 const textStyleBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-text-style]"));
+const projectTypeBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-project-type]"));
+const styleCards = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-style-id]"));
+const influenceBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-influence]"));
+const moodBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-mood]"));
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -106,6 +116,12 @@ const UI_SCALE_STORAGE_KEY = "cursorcanvas_ui_scale";
 const API_KEY_STORAGE_KEY = "cursorcanvas_openai_key";
 const RESEARCH_CONTEXT_STORAGE_KEY = "cursorcanvas_research_context";
 const DESIGN_PROFILE_STORAGE_KEY = "cursorcanvas_design_profile";
+const QUESTIONNAIRE_PROJECT_KEY = "cursorcanvas_questionnaire_project";
+const QUESTIONNAIRE_STYLE_KEY = "cursorcanvas_questionnaire_style";
+const QUESTIONNAIRE_INFLUENCES_KEY = "cursorcanvas_questionnaire_influences";
+const QUESTIONNAIRE_MOODS_KEY = "cursorcanvas_questionnaire_moods";
+const QUESTIONNAIRE_AUDIENCE_KEY = "cursorcanvas_questionnaire_audience";
+const QUESTIONNAIRE_COMPLEXITY_KEY = "cursorcanvas_questionnaire_complexity";
 const MAIN_FRAME_ID_STORAGE_KEY = "cursorcanvas_main_frame_id";
 const MAIN_FRAME_NAME_STORAGE_KEY = "cursorcanvas_main_frame_name";
 const BASE_UI_WIDTH = 460;
@@ -117,6 +133,10 @@ const UI_SCALE_STEP = 0.25;
 let uiScale = MIN_UI_SCALE;
 let mainFrameId = "";
 let mainFrameName = "";
+let selectedProjectType = "website";
+let selectedStyleId = "minimal-editorial";
+const selectedInfluences = new Set<string>(["Swiss typography", "Apple HIG clarity"]);
+const selectedMoods = new Set<string>(["Confident", "Premium", "Clean"]);
 
 const defaultDesignProfile = [
   "You are a senior product designer and UI engineer specialized in translating references into production-ready Figma output using 2025-2026 patterns.",
@@ -125,6 +145,251 @@ const defaultDesignProfile = [
   "Prioritize hierarchy, spacing rhythm, accessibility, and component reusability.",
   "When uncertain, ask concise clarifying questions and choose a practical default.",
 ].join("\n");
+
+const PROJECT_LABELS: Record<string, string> = {
+  website: "Website",
+  logo: "Logo",
+  poster: "Poster",
+  tshirt: "T-Shirt",
+  app: "App UI",
+  "slide-deck": "Slide Deck",
+};
+
+const STYLE_LIBRARY: Record<string, { label: string; example: string; cues: string }> = {
+  "minimal-editorial": {
+    label: "Minimal Editorial",
+    example: "Stripe + Linear style rhythm",
+    cues: "High whitespace, disciplined typography, soft neutral surfaces",
+  },
+  "swiss-grid": {
+    label: "Swiss Grid",
+    example: "Structured modular layouts",
+    cues: "Strict columns, asymmetrical balance, direct hierarchy",
+  },
+  "neo-brutal": {
+    label: "Neo-Brutal",
+    example: "Bold blocks and high contrast",
+    cues: "Heavy outlines, impact headlines, punchy hierarchy",
+  },
+  "neo-retro": {
+    label: "Neo Retro",
+    example: "Modern structure with nostalgic cues",
+    cues: "Contemporary layout, vintage accents, restrained texture",
+  },
+  "playful-modern": {
+    label: "Playful Modern",
+    example: "Rounded motifs and expressive iconography",
+    cues: "Friendly shapes, bright rhythm, approachable language",
+  },
+};
+
+const STYLE_FONT_STACKS: Record<string, string> = {
+  "minimal-editorial": "Inter (700/600/500) + Plus Jakarta Sans (500/600)",
+  "swiss-grid": "Helvetica Neue (700/500) + Inter (500/400)",
+  "neo-brutal": "Archivo (800/700) + Inter (600/500)",
+  "neo-retro": "Fraunces (650/600) + Manrope (600/500)",
+  "playful-modern": "Space Grotesk (700/600) + Manrope (600/500)",
+};
+
+interface Rgb01 {
+  r: number;
+  g: number;
+  b: number;
+}
+
+interface StyleThemePreset {
+  accentA: string;
+  accentB: string;
+  accentSoftA: string;
+  accentSoftB: string;
+  btnFillA: string;
+  btnFillB: string;
+  btnStrokeA: string;
+  btnStrokeB: string;
+  btnText: string;
+  bgGlowA: string;
+  bgGlowB: string;
+  sectionBg: string;
+  sectionStroke: string;
+  controlRadius: number;
+  cardRadius: number;
+  panelRadius: number;
+  chipRadius: number;
+  shadow: string;
+  buttonShadow: string;
+  palette: {
+    primary: string;
+    secondary: string;
+    ink: string;
+    muted: string;
+    surface: string;
+    soft: string;
+  };
+}
+
+const STYLE_THEMES: Record<string, StyleThemePreset> = {
+  "minimal-editorial": {
+    accentA: "#748BFF",
+    accentB: "#4FCBF4",
+    accentSoftA: "rgba(116, 139, 255, 0.34)",
+    accentSoftB: "rgba(79, 203, 244, 0.28)",
+    btnFillA: "#5D79FF",
+    btnFillB: "#40B8F2",
+    btnStrokeA: "rgba(203, 216, 255, 0.9)",
+    btnStrokeB: "rgba(112, 157, 255, 0.9)",
+    btnText: "#F9FAFF",
+    bgGlowA: "rgba(113, 124, 255, 0.24)",
+    bgGlowB: "rgba(54, 189, 255, 0.2)",
+    sectionBg: "rgba(23, 25, 33, 0.62)",
+    sectionStroke: "rgba(114, 129, 190, 0.36)",
+    controlRadius: 8,
+    cardRadius: 12,
+    panelRadius: 14,
+    chipRadius: 999,
+    shadow: "0 14px 24px rgba(0, 0, 0, 0.35)",
+    buttonShadow: "0 7px 18px rgba(68, 122, 255, 0.34)",
+    palette: {
+      primary: "#5D79FF",
+      secondary: "#AFC1FF",
+      ink: "#151723",
+      muted: "#4F5471",
+      surface: "#FDFEFF",
+      soft: "#EEF3FF",
+    },
+  },
+  "swiss-grid": {
+    accentA: "#F04C4C",
+    accentB: "#F5B34E",
+    accentSoftA: "rgba(240, 76, 76, 0.32)",
+    accentSoftB: "rgba(245, 179, 78, 0.26)",
+    btnFillA: "#E94646",
+    btnFillB: "#EFA23C",
+    btnStrokeA: "rgba(255, 196, 196, 0.9)",
+    btnStrokeB: "rgba(255, 211, 140, 0.88)",
+    btnText: "#FFF9F4",
+    bgGlowA: "rgba(240, 76, 76, 0.2)",
+    bgGlowB: "rgba(245, 179, 78, 0.18)",
+    sectionBg: "rgba(36, 23, 23, 0.62)",
+    sectionStroke: "rgba(190, 120, 120, 0.38)",
+    controlRadius: 6,
+    cardRadius: 10,
+    panelRadius: 12,
+    chipRadius: 999,
+    shadow: "0 14px 24px rgba(0, 0, 0, 0.34)",
+    buttonShadow: "0 7px 16px rgba(213, 95, 54, 0.32)",
+    palette: {
+      primary: "#E94646",
+      secondary: "#F5B34E",
+      ink: "#221617",
+      muted: "#684446",
+      surface: "#FFFDFB",
+      soft: "#FFF1E8",
+    },
+  },
+  "neo-brutal": {
+    accentA: "#FFD94A",
+    accentB: "#FF6363",
+    accentSoftA: "rgba(255, 217, 74, 0.34)",
+    accentSoftB: "rgba(255, 99, 99, 0.28)",
+    btnFillA: "#FFD047",
+    btnFillB: "#FF6161",
+    btnStrokeA: "rgba(255, 243, 173, 0.92)",
+    btnStrokeB: "rgba(255, 167, 167, 0.9)",
+    btnText: "#1A1512",
+    bgGlowA: "rgba(255, 217, 74, 0.2)",
+    bgGlowB: "rgba(255, 99, 99, 0.18)",
+    sectionBg: "rgba(40, 32, 18, 0.62)",
+    sectionStroke: "rgba(196, 164, 86, 0.42)",
+    controlRadius: 5,
+    cardRadius: 7,
+    panelRadius: 9,
+    chipRadius: 14,
+    shadow: "0 10px 0 rgba(0, 0, 0, 0.24)",
+    buttonShadow: "0 6px 0 rgba(0, 0, 0, 0.26)",
+    palette: {
+      primary: "#FFCF47",
+      secondary: "#FF6363",
+      ink: "#241A12",
+      muted: "#6A4D35",
+      surface: "#FFFCF5",
+      soft: "#FFF2D5",
+    },
+  },
+  "neo-retro": {
+    accentA: "#3CB9AD",
+    accentB: "#F2A14A",
+    accentSoftA: "rgba(60, 185, 173, 0.31)",
+    accentSoftB: "rgba(242, 161, 74, 0.28)",
+    btnFillA: "#2FAEA0",
+    btnFillB: "#E48C36",
+    btnStrokeA: "rgba(156, 237, 229, 0.88)",
+    btnStrokeB: "rgba(255, 196, 137, 0.86)",
+    btnText: "#F8FFFD",
+    bgGlowA: "rgba(60, 185, 173, 0.2)",
+    bgGlowB: "rgba(242, 161, 74, 0.18)",
+    sectionBg: "rgba(24, 35, 38, 0.62)",
+    sectionStroke: "rgba(98, 172, 172, 0.38)",
+    controlRadius: 9,
+    cardRadius: 12,
+    panelRadius: 14,
+    chipRadius: 999,
+    shadow: "0 15px 28px rgba(0, 0, 0, 0.36)",
+    buttonShadow: "0 8px 18px rgba(58, 142, 140, 0.33)",
+    palette: {
+      primary: "#32AFA2",
+      secondary: "#F2A14A",
+      ink: "#132228",
+      muted: "#3D6068",
+      surface: "#FCFFFE",
+      soft: "#EAF8F5",
+    },
+  },
+  "playful-modern": {
+    accentA: "#846DFF",
+    accentB: "#FF865F",
+    accentSoftA: "rgba(132, 109, 255, 0.34)",
+    accentSoftB: "rgba(255, 134, 95, 0.28)",
+    btnFillA: "#775EFF",
+    btnFillB: "#FF7B54",
+    btnStrokeA: "rgba(198, 184, 255, 0.9)",
+    btnStrokeB: "rgba(255, 182, 157, 0.88)",
+    btnText: "#FFF9F6",
+    bgGlowA: "rgba(132, 109, 255, 0.22)",
+    bgGlowB: "rgba(255, 134, 95, 0.2)",
+    sectionBg: "rgba(29, 24, 41, 0.62)",
+    sectionStroke: "rgba(133, 118, 193, 0.38)",
+    controlRadius: 11,
+    cardRadius: 16,
+    panelRadius: 18,
+    chipRadius: 999,
+    shadow: "0 16px 30px rgba(23, 13, 44, 0.4)",
+    buttonShadow: "0 8px 20px rgba(107, 87, 221, 0.36)",
+    palette: {
+      primary: "#7A63FF",
+      secondary: "#FF835C",
+      ink: "#1E1930",
+      muted: "#5E4F79",
+      surface: "#FFFDFF",
+      soft: "#F2EDFF",
+    },
+  },
+};
+
+let currentPalette: {
+  primary: Rgb01;
+  secondary: Rgb01;
+  ink: Rgb01;
+  muted: Rgb01;
+  surface: Rgb01;
+  soft: Rgb01;
+} = {
+  primary: { r: 0.36, g: 0.47, b: 1 },
+  secondary: { r: 0.69, g: 0.76, b: 1 },
+  ink: { r: 0.08, g: 0.09, b: 0.13 },
+  muted: { r: 0.31, g: 0.33, b: 0.44 },
+  surface: { r: 1, g: 1, b: 1 },
+  soft: { r: 0.93, g: 0.95, b: 1 },
+};
 
 function setStatus(kind: "disconnected" | "connected" | "connecting", text: string) {
   statusEl.className = `status ${kind}`;
@@ -141,6 +406,11 @@ function setChatMeta(text: string) {
 
 function setResearchMeta(text: string) {
   researchMetaEl.textContent = text;
+}
+
+function setQuestionnaireMeta(text: string, isError = false) {
+  questionnaireMetaEl.textContent = text;
+  questionnaireMetaEl.style.color = isError ? "#d88d8d" : "";
 }
 
 function setLibraryMeta(text: string, isError = false) {
@@ -187,11 +457,115 @@ function isEnsureCanvasFrameResult(value: unknown): value is EnsureCanvasFrameRe
   );
 }
 
+function clamp01(value: number): number {
+  return Math.max(0, Math.min(1, value));
+}
+
+function hexToRgb01(hex: string): Rgb01 {
+  const value = hex.trim().replace("#", "");
+  if (value.length !== 6) return { r: 0.5, g: 0.5, b: 0.5 };
+  const r = parseInt(value.slice(0, 2), 16);
+  const g = parseInt(value.slice(2, 4), 16);
+  const b = parseInt(value.slice(4, 6), 16);
+  return {
+    r: clamp01(r / 255),
+    g: clamp01(g / 255),
+    b: clamp01(b / 255),
+  };
+}
+
+function adjustHexLuma(hex: string, delta: number): string {
+  const rgb = hexToRgb01(hex);
+  const adjust = (v: number) => clamp01(v + delta);
+  const r = Math.round(adjust(rgb.r) * 255).toString(16).padStart(2, "0");
+  const g = Math.round(adjust(rgb.g) * 255).toString(16).padStart(2, "0");
+  const b = Math.round(adjust(rgb.b) * 255).toString(16).padStart(2, "0");
+  return `#${r}${g}${b}`;
+}
+
+function setRootVar(name: string, value: string) {
+  document.documentElement.style.setProperty(name, value);
+}
+
+function applyStyleThemeFromSelections() {
+  const preset = STYLE_THEMES[selectedStyleId] ?? STYLE_THEMES["minimal-editorial"];
+  let controlRadius = preset.controlRadius;
+  let cardRadius = preset.cardRadius;
+  let panelRadius = preset.panelRadius;
+  let chipRadius = preset.chipRadius;
+  let shadow = preset.shadow;
+  let buttonShadow = preset.buttonShadow;
+
+  if (complexitySelect.value === "focused and minimal") {
+    controlRadius = Math.max(5, controlRadius - 1);
+    cardRadius = Math.max(8, cardRadius - 2);
+    panelRadius = Math.max(10, panelRadius - 2);
+    shadow = "0 10px 16px rgba(0, 0, 0, 0.22)";
+    buttonShadow = "0 5px 12px rgba(0, 0, 0, 0.2)";
+  } else if (complexitySelect.value === "content-rich") {
+    panelRadius += 1;
+    shadow = "0 18px 30px rgba(0, 0, 0, 0.36)";
+    buttonShadow = "0 9px 20px rgba(0, 0, 0, 0.28)";
+  }
+
+  if (selectedMoods.has("Playful")) {
+    controlRadius += 2;
+    cardRadius += 3;
+    panelRadius += 3;
+  }
+  if (selectedMoods.has("Clean")) {
+    shadow = "0 10px 18px rgba(0, 0, 0, 0.22)";
+  }
+  if (selectedMoods.has("Premium")) {
+    buttonShadow = "0 10px 22px rgba(0, 0, 0, 0.32)";
+  }
+
+  let accentA = preset.accentA;
+  let accentB = preset.accentB;
+  if (selectedProjectType === "poster") {
+    accentA = adjustHexLuma(accentA, 0.06);
+    accentB = adjustHexLuma(accentB, 0.06);
+  } else if (selectedProjectType === "logo") {
+    accentA = adjustHexLuma(accentA, -0.03);
+    accentB = adjustHexLuma(accentB, -0.03);
+  }
+
+  setRootVar("--accent-a", accentA);
+  setRootVar("--accent-b", accentB);
+  setRootVar("--accent-soft-a", preset.accentSoftA);
+  setRootVar("--accent-soft-b", preset.accentSoftB);
+  setRootVar("--btn-fill-a", preset.btnFillA);
+  setRootVar("--btn-fill-b", preset.btnFillB);
+  setRootVar("--btn-stroke-a", preset.btnStrokeA);
+  setRootVar("--btn-stroke-b", preset.btnStrokeB);
+  setRootVar("--btn-text", preset.btnText);
+  setRootVar("--bg-glow-a", preset.bgGlowA);
+  setRootVar("--bg-glow-b", preset.bgGlowB);
+  setRootVar("--section-bg", preset.sectionBg);
+  setRootVar("--section-stroke", preset.sectionStroke);
+  setRootVar("--control-radius", `${controlRadius}px`);
+  setRootVar("--card-radius", `${cardRadius}px`);
+  setRootVar("--panel-radius", `${panelRadius}px`);
+  setRootVar("--chip-radius", chipRadius >= 999 ? "999px" : `${chipRadius}px`);
+  setRootVar("--shadow", shadow);
+  setRootVar("--btn-depth-shadow", buttonShadow);
+
+  currentPalette = {
+    primary: hexToRgb01(preset.palette.primary),
+    secondary: hexToRgb01(preset.palette.secondary),
+    ink: hexToRgb01(preset.palette.ink),
+    muted: hexToRgb01(preset.palette.muted),
+    surface: hexToRgb01(preset.palette.surface),
+    soft: hexToRgb01(preset.palette.soft),
+  };
+}
+
 function applyTheme(theme: "dark" | "light") {
   document.body.classList.remove("theme-dark", "theme-light");
   document.body.classList.add(theme === "light" ? "theme-light" : "theme-dark");
   themeToggleBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
   localStorage.setItem(THEME_STORAGE_KEY, theme);
+  applyStyleThemeFromSelections();
 }
 
 function normalizeScale(value: number): number {
@@ -537,6 +911,199 @@ function saveResearchState() {
   setResearchMeta("Research brief saved.");
 }
 
+function setSingleSelect(buttons: HTMLButtonElement[], activeValue: string, key: string) {
+  for (const btn of buttons) {
+    const value = btn.dataset[key] ?? "";
+    btn.classList.toggle("active", value === activeValue);
+  }
+}
+
+function toggleMultiSelect(
+  buttons: HTMLButtonElement[],
+  selectedSet: Set<string>,
+  key: string,
+  rawValue: string,
+  maxSelected = 3
+) {
+  if (!rawValue) return;
+  if (selectedSet.has(rawValue)) {
+    selectedSet.delete(rawValue);
+  } else {
+    if (selectedSet.size >= maxSelected) {
+      setQuestionnaireMeta(`Select up to ${maxSelected} options.`, true);
+      return;
+    }
+    selectedSet.add(rawValue);
+  }
+  setQuestionnaireMeta("Generate to populate the brief automatically.");
+  for (const btn of buttons) {
+    const value = btn.dataset[key] ?? "";
+    btn.classList.toggle("active", selectedSet.has(value));
+  }
+}
+
+function randomItem<T>(items: T[]): T {
+  return items[Math.floor(Math.random() * items.length)];
+}
+
+function randomSubset<T>(items: T[], min: number, max: number): T[] {
+  const copy = [...items];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  const size = min + Math.floor(Math.random() * Math.max(1, max - min + 1));
+  return copy.slice(0, Math.min(size, copy.length));
+}
+
+function saveQuestionnaireState() {
+  localStorage.setItem(QUESTIONNAIRE_PROJECT_KEY, selectedProjectType);
+  localStorage.setItem(QUESTIONNAIRE_STYLE_KEY, selectedStyleId);
+  localStorage.setItem(QUESTIONNAIRE_INFLUENCES_KEY, JSON.stringify(Array.from(selectedInfluences)));
+  localStorage.setItem(QUESTIONNAIRE_MOODS_KEY, JSON.stringify(Array.from(selectedMoods)));
+  localStorage.setItem(QUESTIONNAIRE_AUDIENCE_KEY, audienceSelect.value);
+  localStorage.setItem(QUESTIONNAIRE_COMPLEXITY_KEY, complexitySelect.value);
+}
+
+function restoreQuestionnaireState() {
+  const project = localStorage.getItem(QUESTIONNAIRE_PROJECT_KEY);
+  if (project && PROJECT_LABELS[project]) selectedProjectType = project;
+
+  const style = localStorage.getItem(QUESTIONNAIRE_STYLE_KEY);
+  if (style && STYLE_LIBRARY[style]) selectedStyleId = style;
+
+  const influenceRaw = localStorage.getItem(QUESTIONNAIRE_INFLUENCES_KEY);
+  if (influenceRaw) {
+    try {
+      const parsed = JSON.parse(influenceRaw) as string[];
+      selectedInfluences.clear();
+      for (const value of parsed.slice(0, 3)) selectedInfluences.add(value);
+    } catch {
+      // ignore invalid persisted state
+    }
+  }
+
+  const moodRaw = localStorage.getItem(QUESTIONNAIRE_MOODS_KEY);
+  if (moodRaw) {
+    try {
+      const parsed = JSON.parse(moodRaw) as string[];
+      selectedMoods.clear();
+      for (const value of parsed.slice(0, 3)) selectedMoods.add(value);
+    } catch {
+      // ignore invalid persisted state
+    }
+  }
+
+  const audience = localStorage.getItem(QUESTIONNAIRE_AUDIENCE_KEY);
+  if (audience) audienceSelect.value = audience;
+
+  const complexity = localStorage.getItem(QUESTIONNAIRE_COMPLEXITY_KEY);
+  if (complexity) complexitySelect.value = complexity;
+}
+
+function syncQuestionnaireUI() {
+  setSingleSelect(projectTypeBtns, selectedProjectType, "projectType");
+  setSingleSelect(styleCards, selectedStyleId, "styleId");
+  for (const btn of influenceBtns) {
+    const value = btn.dataset.influence ?? "";
+    btn.classList.toggle("active", selectedInfluences.has(value));
+  }
+  for (const btn of moodBtns) {
+    const value = btn.dataset.mood ?? "";
+    btn.classList.toggle("active", selectedMoods.has(value));
+  }
+  applyStyleThemeFromSelections();
+}
+
+function applyQuestionnaireDefaults() {
+  restoreQuestionnaireState();
+  syncQuestionnaireUI();
+}
+
+function generateBriefFromQuestionnaire(source: "manual" | "surprise") {
+  const style = STYLE_LIBRARY[selectedStyleId] ?? STYLE_LIBRARY["minimal-editorial"];
+  const fontStack = STYLE_FONT_STACKS[selectedStyleId] ?? "Inter (700/500/400)";
+  const project = PROJECT_LABELS[selectedProjectType] ?? "Design Task";
+  const influences = Array.from(selectedInfluences);
+  const moods = Array.from(selectedMoods);
+  const audience = audienceSelect.value || "general consumers";
+  const complexity = complexitySelect.value || "balanced";
+
+  if (influences.length === 0 || moods.length === 0) {
+    setQuestionnaireMeta("Select at least one influence and one mood before generating.", true);
+    return;
+  }
+
+  const researchContext = [
+    `Project type: ${project}`,
+    `Primary style: ${style.label}`,
+    `Style example: ${style.example}`,
+    `Key visual cues: ${style.cues}`,
+    `Font direction: ${fontStack}`,
+    `Audience: ${audience}`,
+    `Complexity target: ${complexity}`,
+    `Influences: ${influences.join(", ")}`,
+    `Desired feel: ${moods.join(", ")}`,
+    "Output direction:",
+    "- Generate component-first design systems with robust Auto Layout.",
+    "- Keep neutral grayscale foundations with semantic color only for status, calls-to-action, and emphasis.",
+    "- Prioritize spacing rhythm, readability, and practical production handoff.",
+  ].join("\n");
+
+  const designProfile = [
+    "Agent Design Brief Template",
+    "",
+    "Ask and answer these inputs first:",
+    `1) What are we making? ${project}`,
+    `2) What style direction? ${style.label} (${style.example})`,
+    `3) What influences? ${influences.join(", ")}`,
+    `4) What emotional tone? ${moods.join(", ")}`,
+    `5) Who is the audience? ${audience}`,
+    `6) What complexity level? ${complexity}`,
+    `7) Typography pair? ${fontStack}`,
+    "",
+    "Execution rules:",
+    "- Create a frame-first structure and stack sections in Auto Layout.",
+    "- Use a disciplined spacing scale and clean typography rhythm (Inter).",
+    "- Build reusable primitives: buttons, cards, navigation, sections.",
+    "- Include A/B/C variants when uncertainty exists.",
+    "",
+    "Delivery format:",
+    "- Overview",
+    "- Layout structure",
+    "- Token recommendations",
+    "- Component plan",
+    "- Accessibility checks",
+    "",
+    `Generated by questionnaire mode: ${source}.`,
+  ].join("\n");
+
+  researchContextInput.value = researchContext;
+  designProfileInput.value = designProfile;
+  researchFieldsEl.classList.remove("hidden");
+  saveQuestionnaireState();
+  saveResearchState();
+  setResearchMeta("Research brief auto-generated from questionnaire.");
+  setQuestionnaireMeta("Brief generated and inserted below.");
+}
+
+function randomizeQuestionnaire() {
+  const projectValues = projectTypeBtns.map((btn) => btn.dataset.projectType).filter((v): v is string => Boolean(v));
+  const styleValues = styleCards.map((btn) => btn.dataset.styleId).filter((v): v is string => Boolean(v));
+  const influenceValues = influenceBtns.map((btn) => btn.dataset.influence).filter((v): v is string => Boolean(v));
+  const moodValues = moodBtns.map((btn) => btn.dataset.mood).filter((v): v is string => Boolean(v));
+
+  selectedProjectType = randomItem(projectValues);
+  selectedStyleId = randomItem(styleValues);
+  selectedInfluences.clear();
+  selectedMoods.clear();
+  for (const value of randomSubset(influenceValues, 2, 3)) selectedInfluences.add(value);
+  for (const value of randomSubset(moodValues, 2, 3)) selectedMoods.add(value);
+  audienceSelect.selectedIndex = Math.floor(Math.random() * audienceSelect.options.length);
+  complexitySelect.selectedIndex = Math.floor(Math.random() * complexitySelect.options.length);
+  syncQuestionnaireUI();
+}
+
 async function sendChat() {
   const text = chatInput.value.trim();
   if (!text) return;
@@ -628,6 +1195,49 @@ function getPresetCanvasName(preset: string): string {
   }
 }
 
+const SPACING = {
+  xs: 8,
+  sm: 12,
+  md: 16,
+  lg: 24,
+  xl: 32,
+  xxl: 40,
+} as const;
+
+type TextTone = "ink" | "muted" | "subtle" | "inverse";
+
+interface TextSpec {
+  name?: string;
+  fontStyle?: string;
+  fontSize?: number;
+  lineHeightPx?: number;
+  letterSpacingPx?: number;
+  tone?: TextTone;
+  select?: boolean;
+}
+
+function toneToRgb(tone: TextTone): { fillR: number; fillG: number; fillB: number } {
+  switch (tone) {
+    case "muted":
+      return { fillR: currentPalette.muted.r, fillG: currentPalette.muted.g, fillB: currentPalette.muted.b };
+    case "subtle":
+      return {
+        fillR: clamp01(currentPalette.muted.r + 0.12),
+        fillG: clamp01(currentPalette.muted.g + 0.12),
+        fillB: clamp01(currentPalette.muted.b + 0.12),
+      };
+    case "inverse":
+      return { fillR: 1, fillG: 1, fillB: 1 };
+    case "ink":
+    default:
+      return { fillR: currentPalette.ink.r, fillG: currentPalette.ink.g, fillB: currentPalette.ink.b };
+  }
+}
+
+function clampValue(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
 async function createNode(tool: string, params: Record<string, unknown>, timeoutMs = 22000): Promise<NodeResult> {
   const result = await callPluginCommand(tool, params, timeoutMs);
   if (!isNodeResult(result)) {
@@ -655,8 +1265,12 @@ async function ensureMainFrame(forcePreset: boolean): Promise<EnsureCanvasFrameR
   return result;
 }
 
+function mainContentWidth(root: EnsureCanvasFrameResult): number {
+  return Math.max(280, Math.round(root.width - SPACING.xxl * 2));
+}
+
 async function createSectionFrame(root: EnsureCanvasFrameResult, sectionName: string): Promise<NodeResult> {
-  const sectionWidth = Math.max(260, Math.round(root.width - 64));
+  const sectionWidth = mainContentWidth(root);
   return createNode("create_frame", {
     parentId: root.id,
     select: false,
@@ -666,15 +1280,127 @@ async function createSectionFrame(root: EnsureCanvasFrameResult, sectionName: st
     layoutMode: "VERTICAL",
     primaryAxisSizingMode: "AUTO",
     counterAxisSizingMode: "FIXED",
-    itemSpacing: 16,
+    itemSpacing: SPACING.md,
     paddingTop: 20,
     paddingRight: 20,
     paddingBottom: 20,
     paddingLeft: 20,
-    fillR: 0.97,
-    fillG: 0.97,
-    fillB: 0.97,
+    fillR: currentPalette.soft.r,
+    fillG: currentPalette.soft.g,
+    fillB: currentPalette.soft.b,
     cornerRadius: 14,
+  });
+}
+
+async function addText(parentId: string, text: string, spec: TextSpec = {}): Promise<NodeResult> {
+  const tone = toneToRgb(spec.tone ?? "ink");
+  return createNode("create_text", {
+    parentId,
+    select: spec.select ?? false,
+    name: spec.name,
+    text,
+    fontFamily: "Inter",
+    fontStyle: spec.fontStyle ?? "Regular",
+    fontSize: spec.fontSize ?? 16,
+    lineHeightPx: spec.lineHeightPx,
+    letterSpacingPx: spec.letterSpacingPx,
+    ...tone,
+  }, 20000);
+}
+
+async function addButton(
+  parentId: string,
+  label: string,
+  variant: "primary" | "secondary",
+  select = false
+): Promise<NodeResult> {
+  const isPrimary = variant === "primary";
+  const button = await createNode("create_component", {
+    parentId,
+    select: false,
+    name: `Button / ${isPrimary ? "Primary" : "Secondary"}`,
+    width: isPrimary ? 156 : 144,
+    height: 46,
+    cornerRadius: 8,
+    layoutMode: "HORIZONTAL",
+    primaryAxisSizingMode: "AUTO",
+    counterAxisSizingMode: "AUTO",
+    primaryAxisAlignItems: "CENTER",
+    counterAxisAlignItems: "CENTER",
+    itemSpacing: SPACING.xs,
+    paddingTop: 10,
+    paddingRight: 18,
+    paddingBottom: 10,
+    paddingLeft: 18,
+    fillR: isPrimary ? currentPalette.primary.r : currentPalette.soft.r,
+    fillG: isPrimary ? currentPalette.primary.g : currentPalette.soft.g,
+    fillB: isPrimary ? currentPalette.primary.b : currentPalette.soft.b,
+  });
+  await addText(button.id, label, {
+    fontStyle: "Medium",
+    fontSize: 14,
+    lineHeightPx: 20,
+    tone: isPrimary ? "inverse" : "ink",
+    select,
+  });
+  return button;
+}
+
+async function addCard(parentId: string, name: string, width: number): Promise<NodeResult> {
+  return createNode("create_component", {
+    parentId,
+    select: false,
+    name,
+    width,
+    height: 120,
+    cornerRadius: 12,
+    fillR: currentPalette.surface.r,
+    fillG: currentPalette.surface.g,
+    fillB: currentPalette.surface.b,
+    layoutMode: "VERTICAL",
+    primaryAxisSizingMode: "AUTO",
+    counterAxisSizingMode: "FIXED",
+    itemSpacing: SPACING.sm,
+    paddingTop: 20,
+    paddingRight: 20,
+    paddingBottom: 20,
+    paddingLeft: 20,
+  });
+}
+
+async function addBulletRow(parentId: string, text: string, select = false): Promise<void> {
+  const row = await createNode("create_frame", {
+    parentId,
+    select: false,
+    name: "Feature",
+    width: 320,
+    height: 26,
+    layoutMode: "HORIZONTAL",
+    primaryAxisSizingMode: "AUTO",
+    counterAxisSizingMode: "AUTO",
+    counterAxisAlignItems: "CENTER",
+    itemSpacing: SPACING.sm,
+    fillOpacity: 0,
+    fillR: 1,
+    fillG: 1,
+    fillB: 1,
+  });
+  await createNode("create_ellipse", {
+    parentId: row.id,
+    select: false,
+    name: "Dot",
+    width: 8,
+    height: 8,
+    fillR: currentPalette.primary.r,
+    fillG: currentPalette.primary.g,
+    fillB: currentPalette.primary.b,
+  });
+  await addText(row.id, text, {
+    fontStyle: "Regular",
+    fontSize: 15,
+    lineHeightPx: 22,
+    tone: "muted",
+    select,
   });
 }
 
@@ -682,38 +1408,50 @@ async function createTextStyle(raw: string) {
   try {
     const style = JSON.parse(raw) as { label?: string; fontSize?: number; fontStyle?: string; text?: string };
     const root = await ensureMainFrame(false);
+    const width = mainContentWidth(root);
     const container = await createNode("create_frame", {
       parentId: root.id,
       select: false,
       name: `Type / ${style.label ?? "Sample"}`,
-      width: Math.max(260, Math.round(root.width - 64)),
+      width,
       height: 80,
       layoutMode: "VERTICAL",
       primaryAxisSizingMode: "AUTO",
       counterAxisSizingMode: "FIXED",
-      itemSpacing: 8,
-      paddingTop: 16,
-      paddingRight: 16,
-      paddingBottom: 16,
-      paddingLeft: 16,
-      fillR: 0.98,
-      fillG: 0.98,
-      fillB: 0.98,
+      itemSpacing: SPACING.xs,
+      paddingTop: SPACING.md,
+      paddingRight: SPACING.md,
+      paddingBottom: SPACING.md,
+      paddingLeft: SPACING.md,
+      fillR: currentPalette.soft.r,
+      fillG: currentPalette.soft.g,
+      fillB: currentPalette.soft.b,
       cornerRadius: 12,
     });
 
-    await createNode("create_text", {
-      parentId: container.id,
+    await addText(container.id, style.label ?? "Text Style", {
+      fontStyle: "Medium",
+      fontSize: 12,
+      lineHeightPx: 16,
+      letterSpacingPx: 0.4,
+      tone: "subtle",
+    });
+
+    await addText(container.id, style.text ?? style.label ?? "Text", {
       name: style.label ?? "Text Style",
-      text: style.text ?? style.label ?? "Text",
-      fontFamily: "Inter",
       fontStyle: style.fontStyle ?? "Regular",
       fontSize: style.fontSize ?? 16,
-      fillR: 0.12,
-      fillG: 0.12,
-      fillB: 0.12,
+      lineHeightPx: Math.round((style.fontSize ?? 16) * 1.4),
+      tone: "ink",
+    });
+
+    await addText(container.id, `Inter ${style.fontSize ?? 16} / ${(style.fontStyle ?? "Regular").toLowerCase()}`, {
+      fontStyle: "Regular",
+      fontSize: 12,
+      lineHeightPx: 16,
+      tone: "muted",
       select: true,
-    }, 20000);
+    });
 
     setLibraryMeta(`Inserted ${style.label ?? "text style"} in ${root.name}.`);
   } catch (err) {
@@ -725,142 +1463,182 @@ async function createTextStyle(raw: string) {
 async function runTemplate(template: string) {
   try {
     const root = await ensureMainFrame(false);
-    const sectionWidth = Math.max(260, Math.round(root.width - 64));
+    const sectionWidth = mainContentWidth(root);
+    const contentWidth = Math.max(240, sectionWidth - SPACING.xl);
+    const compact = contentWidth < 740;
 
     switch (template) {
       case "hero": {
         const section = await createSectionFrame(root, "Section / Hero");
-        const hero = await createNode("create_frame", {
-          parentId: section.id,
+        const hero = await addCard(section.id, "Hero Surface", contentWidth);
+        const heroTitleSize = clampValue(Math.round(contentWidth / 10), 38, 64);
+        const heroBodySize = heroTitleSize >= 56 ? 20 : 18;
+        await addText(hero.id, "Product Launch", {
+          fontStyle: "Medium",
+          fontSize: 12,
+          lineHeightPx: 16,
+          letterSpacingPx: 0.8,
+          tone: "subtle",
+        });
+        await addText(hero.id, "Design polished interfaces with one prompt", {
+          fontStyle: "Bold",
+          fontSize: heroTitleSize,
+          lineHeightPx: Math.round(heroTitleSize * 1.12),
+          tone: "ink",
+        });
+        await addText(hero.id, "CursorCanvas now structures layouts, components, and typography with stable spacing tokens and cleaner hierarchy.", {
+          fontStyle: "Regular",
+          fontSize: heroBodySize,
+          lineHeightPx: Math.round(heroBodySize * 1.45),
+          tone: "muted",
+        });
+        const actions = await createNode("create_frame", {
+          parentId: hero.id,
           select: false,
-          name: "Hero Section",
-          width: sectionWidth - 40,
-          height: 360,
-          layoutMode: "VERTICAL",
-          itemSpacing: 16,
-          paddingTop: 36,
-          paddingRight: 36,
-          paddingBottom: 36,
-          paddingLeft: 36,
+          name: "Actions",
+          width: contentWidth - SPACING.xl,
+          height: 56,
+          layoutMode: compact ? "VERTICAL" : "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "AUTO",
+          itemSpacing: SPACING.sm,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
-          cornerRadius: 12,
         });
-        await createNode("create_text", {
-          parentId: hero.id,
-          select: false,
-          text: "Hero headline",
-          fontFamily: "Inter",
-          fontStyle: "Bold",
-          fontSize: 56,
-          fillR: 0.08,
-          fillG: 0.08,
-          fillB: 0.08,
-        });
-        await createNode("create_text", {
-          parentId: hero.id,
-          select: false,
-          text: "Supporting subheadline copy",
-          fontFamily: "Inter",
-          fontStyle: "Regular",
-          fontSize: 20,
-          fillR: 0.25,
-          fillG: 0.25,
-          fillB: 0.25,
-        });
-        await createNode("create_component", {
-          parentId: hero.id,
-          select: true,
-          name: "Button / Primary",
-          width: 180,
-          height: 52,
-          cornerRadius: 12,
-          fillR: 0.2,
-          fillG: 0.2,
-          fillB: 0.2,
-        });
+        await addButton(actions.id, "Get Started", "primary");
+        await addButton(actions.id, "Book Demo", "secondary", true);
         break;
       }
 
       case "navbar": {
         const section = await createSectionFrame(root, "Section / Navbar");
-        const nav = await createNode("create_frame", {
-          parentId: section.id,
-          select: false,
-          name: "Navbar",
-          width: sectionWidth - 40,
-          height: 72,
+        const nav = await addCard(section.id, "Navbar", contentWidth);
+        await createNode("set_auto_layout", {
+          nodeId: nav.id,
           layoutMode: "HORIZONTAL",
-          itemSpacing: 20,
-          paddingTop: 16,
-          paddingRight: 24,
-          paddingBottom: 16,
-          paddingLeft: 24,
+          itemSpacing: SPACING.md,
+          paddingTop: SPACING.md,
+          paddingRight: SPACING.lg,
+          paddingBottom: SPACING.md,
+          paddingLeft: SPACING.lg,
           primaryAxisAlignItems: "SPACE_BETWEEN",
           counterAxisAlignItems: "CENTER",
+          primaryAxisSizingMode: "FIXED",
+          counterAxisSizingMode: "FIXED",
+        });
+
+        const left = await createNode("create_frame", {
+          parentId: nav.id,
+          select: false,
+          name: "Brand Group",
+          width: 180,
+          height: 40,
+          layoutMode: "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "AUTO",
+          counterAxisAlignItems: "CENTER",
+          itemSpacing: SPACING.sm,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
-          cornerRadius: 10,
         });
-        await createNode("create_text", {
-          parentId: nav.id,
-          select: false,
-          text: "Brand",
-          fontFamily: "Inter",
+        await addText(left.id, "CursorCanvas", {
           fontStyle: "Bold",
           fontSize: 20,
+          lineHeightPx: 26,
         });
-        await createNode("create_text", {
-          parentId: nav.id,
-          select: true,
-          text: "Navigation",
-          fontFamily: "Inter",
+        await addText(left.id, "v1", {
           fontStyle: "Medium",
-          fontSize: 14,
+          fontSize: 12,
+          lineHeightPx: 16,
+          tone: "subtle",
         });
+
+        const right = await createNode("create_frame", {
+          parentId: nav.id,
+          select: false,
+          name: "Actions",
+          width: 360,
+          height: 40,
+          layoutMode: "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "AUTO",
+          counterAxisAlignItems: "CENTER",
+          itemSpacing: SPACING.md,
+          fillOpacity: 0,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+        });
+        await addText(right.id, "Docs", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addText(right.id, "Pricing", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addText(right.id, "Changelog", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addButton(right.id, "Contact", "secondary", true);
         break;
       }
 
       case "featureGrid": {
         const section = await createSectionFrame(root, "Section / Feature Grid");
-        const grid = await createNode("create_frame", {
+        await addText(section.id, "Feature highlights", {
+          fontStyle: "Semibold",
+          fontSize: 36,
+          lineHeightPx: 44,
+        });
+        await addText(section.id, "Each card uses shared spacing and typography primitives for consistency across generated screens.", {
+          fontStyle: "Regular",
+          fontSize: 17,
+          lineHeightPx: 26,
+          tone: "muted",
+        });
+        const cardsRow = await createNode("create_frame", {
           parentId: section.id,
           select: false,
-          name: "Feature Grid",
-          width: sectionWidth - 40,
-          height: 360,
-          layoutMode: "VERTICAL",
-          itemSpacing: 16,
-          paddingTop: 24,
-          paddingRight: 24,
-          paddingBottom: 24,
-          paddingLeft: 24,
+          name: "Cards",
+          width: contentWidth,
+          height: 120,
+          layoutMode: compact ? "VERTICAL" : "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.md,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
-          cornerRadius: 12,
         });
-        await createNode("create_text", {
-          parentId: grid.id,
-          select: false,
-          text: "Feature highlights",
-          fontFamily: "Inter",
-          fontStyle: "Semibold",
-          fontSize: 30,
-        });
-        for (let i = 1; i <= 3; i += 1) {
-          await createNode("create_component", {
-            parentId: grid.id,
-            select: i === 3,
-            name: `Feature Card ${i}`,
-            width: sectionWidth - 88,
-            height: 96,
-            cornerRadius: 10,
-            fillR: 0.96,
-            fillG: 0.96,
-            fillB: 0.96,
+        const cardWidth = compact ? contentWidth : Math.max(220, Math.floor((contentWidth - SPACING.md * 2) / 3));
+        const cardCopy = [
+          ["Auto Layout", "Frames and components stack cleanly with fixed rhythm."],
+          ["Design Tokens", "Neutral palette with semantic accents for status states."],
+          ["Reusable Primitives", "Cards and buttons are generated from shared recipes."],
+        ] as const;
+        for (let i = 0; i < cardCopy.length; i += 1) {
+          const [title, body] = cardCopy[i];
+          const card = await addCard(cardsRow.id, `Feature Card ${i + 1}`, cardWidth);
+          await createNode("create_rectangle", {
+            parentId: card.id,
+            select: false,
+            name: "Icon",
+            width: 36,
+            height: 36,
+            cornerRadius: 9,
+            fillR: currentPalette.secondary.r,
+            fillG: currentPalette.secondary.g,
+            fillB: currentPalette.secondary.b,
+          });
+          await addText(card.id, title, {
+            fontStyle: "Semibold",
+            fontSize: 20,
+            lineHeightPx: 26,
+          });
+          await addText(card.id, body, {
+            fontStyle: "Regular",
+            fontSize: 15,
+            lineHeightPx: 23,
+            tone: "muted",
+            select: i === cardCopy.length - 1,
           });
         }
         break;
@@ -868,129 +1646,248 @@ async function runTemplate(template: string) {
 
       case "pricingCard": {
         const section = await createSectionFrame(root, "Section / Pricing");
-        const card = await createNode("create_component", {
-          parentId: section.id,
+        const card = await addCard(section.id, "Pricing Card", Math.min(440, contentWidth));
+        await addText(card.id, "Most Popular", {
+          fontStyle: "Medium",
+          fontSize: 12,
+          lineHeightPx: 16,
+          letterSpacingPx: 0.7,
+          tone: "subtle",
+        });
+        await addText(card.id, "Pro Plan", {
+          fontStyle: "Semibold",
+          fontSize: 28,
+          lineHeightPx: 34,
+        });
+        await addText(card.id, "$49/mo", {
+          fontStyle: "Bold",
+          fontSize: 46,
+          lineHeightPx: 52,
+        });
+        await addText(card.id, "Billed monthly. Cancel anytime.", {
+          fontStyle: "Regular",
+          fontSize: 14,
+          lineHeightPx: 20,
+          tone: "muted",
+        });
+        const features = await createNode("create_frame", {
+          parentId: card.id,
           select: false,
-          name: "Pricing Card",
-          width: Math.min(360, sectionWidth - 40),
-          height: 260,
-          cornerRadius: 16,
+          name: "Feature List",
+          width: 360,
+          height: 100,
+          layoutMode: "VERTICAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.xs,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
-          layoutMode: "VERTICAL",
-          itemSpacing: 12,
-          paddingTop: 24,
-          paddingRight: 24,
-          paddingBottom: 24,
-          paddingLeft: 24,
         });
-        await createNode("create_text", {
+        await addBulletRow(features.id, "Unlimited projects");
+        await addBulletRow(features.id, "Advanced component templates");
+        await addBulletRow(features.id, "Priority generation queue");
+        const actions = await createNode("create_frame", {
           parentId: card.id,
           select: false,
-          text: "Pro Plan",
-          fontFamily: "Inter",
-          fontStyle: "Semibold",
-          fontSize: 24,
+          name: "Actions",
+          width: 360,
+          height: 50,
+          layoutMode: compact ? "VERTICAL" : "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "AUTO",
+          itemSpacing: SPACING.sm,
+          fillOpacity: 0,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
         });
-        await createNode("create_text", {
-          parentId: card.id,
-          select: true,
-          text: "$49/mo",
-          fontFamily: "Inter",
-          fontStyle: "Bold",
-          fontSize: 40,
-        });
+        await addButton(actions.id, "Start Trial", "primary");
+        await addButton(actions.id, "View Details", "secondary", true);
         break;
       }
 
       case "sidebarShell": {
         const section = await createSectionFrame(root, "Section / Sidebar App");
-        const shellWidth = sectionWidth - 40;
         const shell = await createNode("create_frame", {
           parentId: section.id,
           select: false,
           name: "Sidebar Shell",
-          width: shellWidth,
-          height: 560,
-          layoutMode: "HORIZONTAL",
-          itemSpacing: 16,
-          fillR: 1,
-          fillG: 1,
-          fillB: 1,
-          cornerRadius: 12,
+          width: contentWidth,
+          height: 640,
+          layoutMode: compact ? "VERTICAL" : "HORIZONTAL",
+          primaryAxisSizingMode: "FIXED",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.md,
+          fillR: currentPalette.surface.r,
+          fillG: currentPalette.surface.g,
+          fillB: currentPalette.surface.b,
+          cornerRadius: 14,
+          paddingTop: SPACING.md,
+          paddingRight: SPACING.md,
+          paddingBottom: SPACING.md,
+          paddingLeft: SPACING.md,
         });
-        const sidebarWidth = Math.min(260, Math.max(180, Math.round(shellWidth * 0.22)));
-        await createNode("create_frame", {
+        const sidebarWidth = compact ? contentWidth - SPACING.lg : Math.min(240, Math.max(190, Math.round(contentWidth * 0.24)));
+        const sidebar = await createNode("create_frame", {
           parentId: shell.id,
           select: false,
           name: "Sidebar",
           width: sidebarWidth,
-          height: 560,
+          height: compact ? 220 : 608,
           layoutMode: "VERTICAL",
-          itemSpacing: 10,
-          paddingTop: 20,
-          paddingRight: 16,
-          paddingBottom: 20,
-          paddingLeft: 16,
-          fillR: 0.95,
-          fillG: 0.95,
-          fillB: 0.95,
+          primaryAxisSizingMode: "FIXED",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.sm,
+          paddingTop: SPACING.md,
+          paddingRight: SPACING.md,
+          paddingBottom: SPACING.md,
+          paddingLeft: SPACING.md,
+          fillR: currentPalette.soft.r,
+          fillG: currentPalette.soft.g,
+          fillB: currentPalette.soft.b,
+          cornerRadius: 12,
         });
-        await createNode("create_frame", {
+        await addText(sidebar.id, "Workspace", { fontStyle: "Semibold", fontSize: 16, lineHeightPx: 22 });
+        await addText(sidebar.id, "Overview", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addText(sidebar.id, "Projects", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addText(sidebar.id, "Library", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+        await addText(sidebar.id, "Settings", { fontStyle: "Medium", fontSize: 14, lineHeightPx: 20, tone: "muted" });
+
+        const content = await createNode("create_frame", {
           parentId: shell.id,
-          select: true,
+          select: false,
           name: "Content",
-          width: Math.max(220, shellWidth - sidebarWidth - 16),
-          height: 560,
+          width: compact ? contentWidth - SPACING.lg : Math.max(340, contentWidth - sidebarWidth - SPACING.md),
+          height: compact ? 380 : 608,
           layoutMode: "VERTICAL",
-          itemSpacing: 16,
-          paddingTop: 24,
-          paddingRight: 24,
-          paddingBottom: 24,
-          paddingLeft: 24,
+          primaryAxisSizingMode: "FIXED",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.md,
+          paddingTop: SPACING.md,
+          paddingRight: SPACING.md,
+          paddingBottom: SPACING.md,
+          paddingLeft: SPACING.md,
+          fillR: currentPalette.surface.r,
+          fillG: currentPalette.surface.g,
+          fillB: currentPalette.surface.b,
+          cornerRadius: 12,
+        });
+        const topBar = await createNode("create_frame", {
+          parentId: content.id,
+          select: false,
+          name: "Top Bar",
+          width: Math.max(300, compact ? contentWidth - SPACING.xxl : contentWidth - sidebarWidth - SPACING.xxl),
+          height: 56,
+          layoutMode: "HORIZONTAL",
+          primaryAxisSizingMode: "FIXED",
+          counterAxisSizingMode: "FIXED",
+          primaryAxisAlignItems: "SPACE_BETWEEN",
+          counterAxisAlignItems: "CENTER",
+          fillR: clamp01(currentPalette.soft.r - 0.04),
+          fillG: clamp01(currentPalette.soft.g - 0.04),
+          fillB: clamp01(currentPalette.soft.b - 0.04),
+          cornerRadius: 10,
+          paddingTop: SPACING.sm,
+          paddingRight: SPACING.md,
+          paddingBottom: SPACING.sm,
+          paddingLeft: SPACING.md,
+        });
+        await addText(topBar.id, "Dashboard", { fontStyle: "Semibold", fontSize: 22, lineHeightPx: 28 });
+        await addButton(topBar.id, "New View", "primary");
+
+        const statsRow = await createNode("create_frame", {
+          parentId: content.id,
+          select: false,
+          name: "Stats",
+          width: Math.max(300, compact ? contentWidth - SPACING.xxl : contentWidth - sidebarWidth - SPACING.xxl),
+          height: 100,
+          layoutMode: compact ? "VERTICAL" : "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "FIXED",
+          itemSpacing: SPACING.sm,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
+        });
+        const statWidth = compact ? Math.max(280, contentWidth - SPACING.xxl) : 170;
+        for (const label of ["Active files", "Components", "Token sets"] as const) {
+          const stat = await addCard(statsRow.id, `Metric / ${label}`, statWidth);
+          await addText(stat.id, label, { fontStyle: "Medium", fontSize: 13, lineHeightPx: 18, tone: "subtle" });
+          await addText(stat.id, label === "Active files" ? "42" : label === "Components" ? "118" : "27", {
+            fontStyle: "Bold",
+            fontSize: 28,
+            lineHeightPx: 34,
+          });
+        }
+
+        const activity = await addCard(content.id, "Activity", Math.max(300, compact ? contentWidth - SPACING.xxl : contentWidth - sidebarWidth - SPACING.xxl));
+        await addText(activity.id, "Recent activity", {
+          fontStyle: "Semibold",
+          fontSize: 20,
+          lineHeightPx: 26,
+        });
+        await addText(activity.id, "Landing page hero updated and spacing tokens normalized across 6 sections.", {
+          fontStyle: "Regular",
+          fontSize: 15,
+          lineHeightPx: 23,
+          tone: "muted",
+          select: true,
         });
         break;
       }
 
       case "modal": {
         const section = await createSectionFrame(root, "Section / Modal");
-        const modal = await createNode("create_component", {
+        const backdrop = await createNode("create_frame", {
           parentId: section.id,
           select: false,
-          name: "Modal",
-          width: Math.min(640, sectionWidth - 40),
-          height: 260,
-          cornerRadius: 16,
+          name: "Backdrop",
+          width: contentWidth,
+          height: 420,
+          layoutMode: "VERTICAL",
+          primaryAxisAlignItems: "CENTER",
+          counterAxisAlignItems: "CENTER",
+          fillR: currentPalette.soft.r,
+          fillG: currentPalette.soft.g,
+          fillB: currentPalette.soft.b,
+          cornerRadius: 14,
+          paddingTop: SPACING.xxl,
+          paddingRight: SPACING.lg,
+          paddingBottom: SPACING.xxl,
+          paddingLeft: SPACING.lg,
+        });
+        const modal = await addCard(backdrop.id, "Modal", Math.min(620, contentWidth - SPACING.lg * 2));
+        await addText(modal.id, "Modal title", {
+          fontStyle: "Semibold",
+          fontSize: 30,
+          lineHeightPx: 36,
+        });
+        await addText(modal.id, "Supporting details and next-step guidance appear here. Keep body copy concise and scannable.", {
+          fontStyle: "Regular",
+          fontSize: 16,
+          lineHeightPx: 24,
+          tone: "muted",
+        });
+        const actions = await createNode("create_frame", {
+          parentId: modal.id,
+          select: false,
+          name: "Actions",
+          width: 360,
+          height: 56,
+          layoutMode: "HORIZONTAL",
+          primaryAxisSizingMode: "AUTO",
+          counterAxisSizingMode: "AUTO",
+          itemSpacing: SPACING.sm,
+          fillOpacity: 0,
           fillR: 1,
           fillG: 1,
           fillB: 1,
-          layoutMode: "VERTICAL",
-          itemSpacing: 14,
-          paddingTop: 24,
-          paddingRight: 24,
-          paddingBottom: 24,
-          paddingLeft: 24,
         });
-        await createNode("create_text", {
-          parentId: modal.id,
-          select: false,
-          text: "Modal title",
-          fontFamily: "Inter",
-          fontStyle: "Semibold",
-          fontSize: 28,
-        });
-        await createNode("create_text", {
-          parentId: modal.id,
-          select: true,
-          text: "Supporting details and action summary.",
-          fontFamily: "Inter",
-          fontStyle: "Regular",
-          fontSize: 16,
-        });
+        await addButton(actions.id, "Cancel", "secondary");
+        await addButton(actions.id, "Confirm", "primary", true);
         break;
       }
 
@@ -999,13 +1896,12 @@ async function runTemplate(template: string) {
         return;
     }
 
-    setLibraryMeta(`Inserted ${template} in ${root.name}.`);
+    setLibraryMeta(`Inserted ${template} in ${root.name}. All layers were added inside the selected main frame.`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setLibraryMeta(`Template failed: ${message}`, true);
   }
 }
-
 connectBtn.addEventListener("click", () => {
   if (httpMode) {
     manualDisconnect = true;
@@ -1053,6 +1949,64 @@ useResearchNowBtn.addEventListener("click", () => {
   activatePage("chatPage");
   chatInput.focus();
   setChatMeta("Research context is active for next generation.");
+});
+
+for (const btn of projectTypeBtns) {
+  btn.addEventListener("click", () => {
+    const value = btn.dataset.projectType;
+    if (!value) return;
+    selectedProjectType = value;
+    setSingleSelect(projectTypeBtns, selectedProjectType, "projectType");
+    applyStyleThemeFromSelections();
+    setQuestionnaireMeta("Generate to populate the brief automatically.");
+  });
+}
+
+for (const btn of styleCards) {
+  btn.addEventListener("click", () => {
+    const value = btn.dataset.styleId;
+    if (!value) return;
+    selectedStyleId = value;
+    setSingleSelect(styleCards, selectedStyleId, "styleId");
+    applyStyleThemeFromSelections();
+    setQuestionnaireMeta("Generate to populate the brief automatically.");
+  });
+}
+
+for (const btn of influenceBtns) {
+  btn.addEventListener("click", () => {
+    const value = btn.dataset.influence;
+    if (!value) return;
+    toggleMultiSelect(influenceBtns, selectedInfluences, "influence", value, 3);
+    applyStyleThemeFromSelections();
+  });
+}
+
+for (const btn of moodBtns) {
+  btn.addEventListener("click", () => {
+    const value = btn.dataset.mood;
+    if (!value) return;
+    toggleMultiSelect(moodBtns, selectedMoods, "mood", value, 3);
+    applyStyleThemeFromSelections();
+  });
+}
+
+generateBriefBtn.addEventListener("click", () => {
+  generateBriefFromQuestionnaire("manual");
+});
+
+surpriseBriefBtn.addEventListener("click", () => {
+  randomizeQuestionnaire();
+  generateBriefFromQuestionnaire("surprise");
+});
+
+audienceSelect.addEventListener("change", () => {
+  setQuestionnaireMeta("Generate to refresh the brief with updated audience.");
+});
+
+complexitySelect.addEventListener("change", () => {
+  applyStyleThemeFromSelections();
+  setQuestionnaireMeta("Generate to refresh the brief with updated complexity.");
 });
 
 createMainFrameBtn.addEventListener("click", () => {
@@ -1148,11 +2102,14 @@ void applyUiScale(uiScale);
 const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
 if (storedApiKey) apiKeyInput.value = storedApiKey;
 
+applyQuestionnaireDefaults();
+
 const storedResearch = localStorage.getItem(RESEARCH_CONTEXT_STORAGE_KEY);
 if (storedResearch) researchContextInput.value = storedResearch;
 
 const storedProfile = localStorage.getItem(DESIGN_PROFILE_STORAGE_KEY);
 designProfileInput.value = storedProfile && storedProfile.trim() ? storedProfile : defaultDesignProfile;
+researchFieldsEl.classList.add("hidden");
 
 const storedMainFrameId = localStorage.getItem(MAIN_FRAME_ID_STORAGE_KEY);
 const storedMainFrameName = localStorage.getItem(MAIN_FRAME_NAME_STORAGE_KEY);
@@ -1163,5 +2120,6 @@ if (storedMainFrameId && storedMainFrameName) {
 updateMainFrameLabel();
 
 updateProviderUI();
+setQuestionnaireMeta("Generate to populate the brief automatically.");
 setAssistantOutput("CursorCanvas ready. Connect, then chat to generate designs directly on canvas.");
 setLibraryMeta("Create or select a main frame, then insert templates in a clean vertical stack.");
