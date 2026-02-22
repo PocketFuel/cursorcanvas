@@ -29,6 +29,10 @@ const saveResearchBtn = byId<HTMLButtonElement>("saveResearch");
 const useResearchNowBtn = byId<HTMLButtonElement>("useResearchNow");
 const researchMetaEl = byId<HTMLParagraphElement>("researchMeta");
 const libraryMetaEl = byId<HTMLParagraphElement>("libraryMeta");
+const framePresetSelect = byId<HTMLSelectElement>("framePreset");
+const createMainFrameBtn = byId<HTMLButtonElement>("createMainFrame");
+const clearMainFrameBtn = byId<HTMLButtonElement>("clearMainFrame");
+const targetFrameLabelEl = byId<HTMLSpanElement>("targetFrameLabel");
 
 const navBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-page-target]"));
 const pages = Array.from(document.querySelectorAll<HTMLElement>(".page"));
@@ -69,6 +73,20 @@ interface ChatResponse {
   toolCalls?: Array<{ tool: string; params: Record<string, unknown>; error?: string }>;
 }
 
+interface EnsureCanvasFrameResult {
+  id: string;
+  name: string;
+  preset: string;
+  width: number;
+  height: number;
+  created: boolean;
+}
+
+interface NodeResult {
+  id: string;
+  name?: string;
+}
+
 const pending = new Map<string, PendingRequest>();
 const chatHistory: ChatMessage[] = [];
 
@@ -88,6 +106,8 @@ const UI_SCALE_STORAGE_KEY = "cursorcanvas_ui_scale";
 const API_KEY_STORAGE_KEY = "cursorcanvas_openai_key";
 const RESEARCH_CONTEXT_STORAGE_KEY = "cursorcanvas_research_context";
 const DESIGN_PROFILE_STORAGE_KEY = "cursorcanvas_design_profile";
+const MAIN_FRAME_ID_STORAGE_KEY = "cursorcanvas_main_frame_id";
+const MAIN_FRAME_NAME_STORAGE_KEY = "cursorcanvas_main_frame_name";
 const BASE_UI_WIDTH = 460;
 const BASE_UI_HEIGHT = 820;
 const MIN_UI_SCALE = 1;
@@ -95,6 +115,8 @@ const MAX_UI_SCALE = 2;
 const UI_SCALE_STEP = 0.25;
 
 let uiScale = MIN_UI_SCALE;
+let mainFrameId = "";
+let mainFrameName = "";
 
 const defaultDesignProfile = [
   "You are a senior product designer and UI engineer specialized in translating references into production-ready Figma output using 2025-2026 patterns.",
@@ -126,8 +148,43 @@ function setLibraryMeta(text: string, isError = false) {
   libraryMetaEl.style.color = isError ? "#d88d8d" : "";
 }
 
+function updateMainFrameLabel() {
+  targetFrameLabelEl.textContent = mainFrameName || "None";
+}
+
+function setMainFrameTarget(id: string, name: string) {
+  mainFrameId = id;
+  mainFrameName = name;
+  localStorage.setItem(MAIN_FRAME_ID_STORAGE_KEY, id);
+  localStorage.setItem(MAIN_FRAME_NAME_STORAGE_KEY, name);
+  updateMainFrameLabel();
+}
+
+function clearMainFrameTarget() {
+  mainFrameId = "";
+  mainFrameName = "";
+  localStorage.removeItem(MAIN_FRAME_ID_STORAGE_KEY);
+  localStorage.removeItem(MAIN_FRAME_NAME_STORAGE_KEY);
+  updateMainFrameLabel();
+}
+
 function setAssistantOutput(text: string) {
   assistantOutputEl.textContent = text;
+}
+
+function isNodeResult(value: unknown): value is NodeResult {
+  return Boolean(value) && typeof value === "object" && typeof (value as { id?: unknown }).id === "string";
+}
+
+function isEnsureCanvasFrameResult(value: unknown): value is EnsureCanvasFrameResult {
+  if (!value || typeof value !== "object") return false;
+  const data = value as Partial<EnsureCanvasFrameResult>;
+  return (
+    typeof data.id === "string" &&
+    typeof data.name === "string" &&
+    typeof data.width === "number" &&
+    typeof data.height === "number"
+  );
 }
 
 function applyTheme(theme: "dark" | "light") {
@@ -555,10 +612,98 @@ function clearChat() {
   setChatMeta("Chat cleared.");
 }
 
+function getPresetCanvasName(preset: string): string {
+  switch (preset) {
+    case "tablet":
+      return "Tablet Canvas";
+    case "mobile":
+      return "Mobile Canvas";
+    case "letter":
+      return "8.5x11 Canvas";
+    case "presentation":
+      return "Presentation Canvas";
+    case "desktop":
+    default:
+      return "Desktop Canvas";
+  }
+}
+
+async function createNode(tool: string, params: Record<string, unknown>, timeoutMs = 22000): Promise<NodeResult> {
+  const result = await callPluginCommand(tool, params, timeoutMs);
+  if (!isNodeResult(result)) {
+    throw new Error(`${tool} returned an invalid result.`);
+  }
+  return result;
+}
+
+async function ensureMainFrame(forcePreset: boolean): Promise<EnsureCanvasFrameResult> {
+  const preset = framePresetSelect.value || "desktop";
+  const params: Record<string, unknown> = {
+    preset,
+    name: getPresetCanvasName(preset),
+    forcePreset,
+    useSelectedFrame: !mainFrameId,
+  };
+  if (mainFrameId) {
+    params.frameId = mainFrameId;
+  }
+  const result = await callPluginCommand("ensure_canvas_frame", params, 24000);
+  if (!isEnsureCanvasFrameResult(result)) {
+    throw new Error("Failed to create or resolve main frame.");
+  }
+  setMainFrameTarget(result.id, result.name);
+  return result;
+}
+
+async function createSectionFrame(root: EnsureCanvasFrameResult, sectionName: string): Promise<NodeResult> {
+  const sectionWidth = Math.max(260, Math.round(root.width - 64));
+  return createNode("create_frame", {
+    parentId: root.id,
+    select: false,
+    name: sectionName,
+    width: sectionWidth,
+    height: 100,
+    layoutMode: "VERTICAL",
+    primaryAxisSizingMode: "AUTO",
+    counterAxisSizingMode: "FIXED",
+    itemSpacing: 16,
+    paddingTop: 20,
+    paddingRight: 20,
+    paddingBottom: 20,
+    paddingLeft: 20,
+    fillR: 0.97,
+    fillG: 0.97,
+    fillB: 0.97,
+    cornerRadius: 14,
+  });
+}
+
 async function createTextStyle(raw: string) {
   try {
     const style = JSON.parse(raw) as { label?: string; fontSize?: number; fontStyle?: string; text?: string };
-    const params: Record<string, unknown> = {
+    const root = await ensureMainFrame(false);
+    const container = await createNode("create_frame", {
+      parentId: root.id,
+      select: false,
+      name: `Type / ${style.label ?? "Sample"}`,
+      width: Math.max(260, Math.round(root.width - 64)),
+      height: 80,
+      layoutMode: "VERTICAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 8,
+      paddingTop: 16,
+      paddingRight: 16,
+      paddingBottom: 16,
+      paddingLeft: 16,
+      fillR: 0.98,
+      fillG: 0.98,
+      fillB: 0.98,
+      cornerRadius: 12,
+    });
+
+    await createNode("create_text", {
+      parentId: container.id,
       name: style.label ?? "Text Style",
       text: style.text ?? style.label ?? "Text",
       fontFamily: "Inter",
@@ -567,9 +712,10 @@ async function createTextStyle(raw: string) {
       fillR: 0.12,
       fillG: 0.12,
       fillB: 0.12,
-    };
-    await callPluginCommand("create_text", params, 20000);
-    setLibraryMeta(`Inserted ${style.label ?? "text style"} on canvas.`);
+      select: true,
+    }, 20000);
+
+    setLibraryMeta(`Inserted ${style.label ?? "text style"} in ${root.name}.`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setLibraryMeta(`Failed to insert text style: ${message}`, true);
@@ -577,115 +723,283 @@ async function createTextStyle(raw: string) {
 }
 
 async function runTemplate(template: string) {
-  const steps: Array<{ tool: string; params: Record<string, unknown> }> = [];
-
-  switch (template) {
-    case "hero":
-      steps.push(
-        {
-          tool: "create_frame",
-          params: {
-            name: "Hero Section",
-            width: 1200,
-            height: 680,
-            layoutMode: "VERTICAL",
-            itemSpacing: 20,
-            paddingTop: 48,
-            paddingRight: 48,
-            paddingBottom: 48,
-            paddingLeft: 48,
-          },
-        },
-        { tool: "create_text", params: { text: "Hero headline", fontFamily: "Inter", fontStyle: "Bold", fontSize: 56 } },
-        { tool: "create_text", params: { text: "Supporting subheadline copy", fontFamily: "Inter", fontStyle: "Regular", fontSize: 20 } },
-        { tool: "create_component", params: { name: "Button / Primary", width: 180, height: 52, cornerRadius: 12, fillR: 0.2, fillG: 0.2, fillB: 0.2 } }
-      );
-      break;
-    case "navbar":
-      steps.push(
-        {
-          tool: "create_frame",
-          params: {
-            name: "Navbar",
-            width: 1200,
-            height: 72,
-            layoutMode: "HORIZONTAL",
-            itemSpacing: 20,
-            paddingTop: 16,
-            paddingRight: 24,
-            paddingBottom: 16,
-            paddingLeft: 24,
-            primaryAxisAlignItems: "SPACE_BETWEEN",
-            counterAxisAlignItems: "CENTER",
-          },
-        },
-        { tool: "create_text", params: { text: "Brand", fontFamily: "Inter", fontStyle: "Bold", fontSize: 20 } },
-        { tool: "create_text", params: { text: "Navigation", fontFamily: "Inter", fontStyle: "Medium", fontSize: 14 } }
-      );
-      break;
-    case "featureGrid":
-      steps.push(
-        {
-          tool: "create_frame",
-          params: {
-            name: "Feature Grid",
-            width: 1100,
-            height: 620,
-            layoutMode: "VERTICAL",
-            itemSpacing: 16,
-            paddingTop: 24,
-            paddingRight: 24,
-            paddingBottom: 24,
-            paddingLeft: 24,
-          },
-        },
-        { tool: "create_text", params: { text: "Feature highlights", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 30 } }
-      );
-      break;
-    case "pricingCard":
-      steps.push(
-        { tool: "create_component", params: { name: "Pricing Card", width: 340, height: 440, cornerRadius: 16, fillR: 0.98, fillG: 0.98, fillB: 0.98 } },
-        { tool: "create_text", params: { text: "Pro Plan", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 24 } },
-        { tool: "create_text", params: { text: "$49/mo", fontFamily: "Inter", fontStyle: "Bold", fontSize: 40 } }
-      );
-      break;
-    case "sidebarShell":
-      steps.push(
-        {
-          tool: "create_frame",
-          params: {
-            name: "Sidebar Shell",
-            width: 1366,
-            height: 900,
-            layoutMode: "HORIZONTAL",
-            itemSpacing: 0,
-            paddingTop: 0,
-            paddingRight: 0,
-            paddingBottom: 0,
-            paddingLeft: 0,
-          },
-        },
-        { tool: "create_frame", params: { name: "Sidebar", width: 264, height: 900, layoutMode: "VERTICAL", itemSpacing: 10, paddingTop: 20, paddingRight: 16, paddingBottom: 20, paddingLeft: 16 } },
-        { tool: "create_frame", params: { name: "Content", width: 1102, height: 900, layoutMode: "VERTICAL", itemSpacing: 16, paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24 } }
-      );
-      break;
-    case "modal":
-      steps.push(
-        { tool: "create_component", params: { name: "Modal", width: 560, height: 360, cornerRadius: 16, fillR: 1, fillG: 1, fillB: 1, layoutMode: "VERTICAL", itemSpacing: 14, paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24 } },
-        { tool: "create_text", params: { text: "Modal title", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 28 } },
-        { tool: "create_text", params: { text: "Supporting details and action summary.", fontFamily: "Inter", fontStyle: "Regular", fontSize: 16 } }
-      );
-      break;
-    default:
-      setLibraryMeta(`Unknown template: ${template}`, true);
-      return;
-  }
-
   try {
-    for (const step of steps) {
-      await callPluginCommand(step.tool, step.params, 22000);
+    const root = await ensureMainFrame(false);
+    const sectionWidth = Math.max(260, Math.round(root.width - 64));
+
+    switch (template) {
+      case "hero": {
+        const section = await createSectionFrame(root, "Section / Hero");
+        const hero = await createNode("create_frame", {
+          parentId: section.id,
+          select: false,
+          name: "Hero Section",
+          width: sectionWidth - 40,
+          height: 360,
+          layoutMode: "VERTICAL",
+          itemSpacing: 16,
+          paddingTop: 36,
+          paddingRight: 36,
+          paddingBottom: 36,
+          paddingLeft: 36,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          cornerRadius: 12,
+        });
+        await createNode("create_text", {
+          parentId: hero.id,
+          select: false,
+          text: "Hero headline",
+          fontFamily: "Inter",
+          fontStyle: "Bold",
+          fontSize: 56,
+          fillR: 0.08,
+          fillG: 0.08,
+          fillB: 0.08,
+        });
+        await createNode("create_text", {
+          parentId: hero.id,
+          select: false,
+          text: "Supporting subheadline copy",
+          fontFamily: "Inter",
+          fontStyle: "Regular",
+          fontSize: 20,
+          fillR: 0.25,
+          fillG: 0.25,
+          fillB: 0.25,
+        });
+        await createNode("create_component", {
+          parentId: hero.id,
+          select: true,
+          name: "Button / Primary",
+          width: 180,
+          height: 52,
+          cornerRadius: 12,
+          fillR: 0.2,
+          fillG: 0.2,
+          fillB: 0.2,
+        });
+        break;
+      }
+
+      case "navbar": {
+        const section = await createSectionFrame(root, "Section / Navbar");
+        const nav = await createNode("create_frame", {
+          parentId: section.id,
+          select: false,
+          name: "Navbar",
+          width: sectionWidth - 40,
+          height: 72,
+          layoutMode: "HORIZONTAL",
+          itemSpacing: 20,
+          paddingTop: 16,
+          paddingRight: 24,
+          paddingBottom: 16,
+          paddingLeft: 24,
+          primaryAxisAlignItems: "SPACE_BETWEEN",
+          counterAxisAlignItems: "CENTER",
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          cornerRadius: 10,
+        });
+        await createNode("create_text", {
+          parentId: nav.id,
+          select: false,
+          text: "Brand",
+          fontFamily: "Inter",
+          fontStyle: "Bold",
+          fontSize: 20,
+        });
+        await createNode("create_text", {
+          parentId: nav.id,
+          select: true,
+          text: "Navigation",
+          fontFamily: "Inter",
+          fontStyle: "Medium",
+          fontSize: 14,
+        });
+        break;
+      }
+
+      case "featureGrid": {
+        const section = await createSectionFrame(root, "Section / Feature Grid");
+        const grid = await createNode("create_frame", {
+          parentId: section.id,
+          select: false,
+          name: "Feature Grid",
+          width: sectionWidth - 40,
+          height: 360,
+          layoutMode: "VERTICAL",
+          itemSpacing: 16,
+          paddingTop: 24,
+          paddingRight: 24,
+          paddingBottom: 24,
+          paddingLeft: 24,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          cornerRadius: 12,
+        });
+        await createNode("create_text", {
+          parentId: grid.id,
+          select: false,
+          text: "Feature highlights",
+          fontFamily: "Inter",
+          fontStyle: "Semibold",
+          fontSize: 30,
+        });
+        for (let i = 1; i <= 3; i += 1) {
+          await createNode("create_component", {
+            parentId: grid.id,
+            select: i === 3,
+            name: `Feature Card ${i}`,
+            width: sectionWidth - 88,
+            height: 96,
+            cornerRadius: 10,
+            fillR: 0.96,
+            fillG: 0.96,
+            fillB: 0.96,
+          });
+        }
+        break;
+      }
+
+      case "pricingCard": {
+        const section = await createSectionFrame(root, "Section / Pricing");
+        const card = await createNode("create_component", {
+          parentId: section.id,
+          select: false,
+          name: "Pricing Card",
+          width: Math.min(360, sectionWidth - 40),
+          height: 260,
+          cornerRadius: 16,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          layoutMode: "VERTICAL",
+          itemSpacing: 12,
+          paddingTop: 24,
+          paddingRight: 24,
+          paddingBottom: 24,
+          paddingLeft: 24,
+        });
+        await createNode("create_text", {
+          parentId: card.id,
+          select: false,
+          text: "Pro Plan",
+          fontFamily: "Inter",
+          fontStyle: "Semibold",
+          fontSize: 24,
+        });
+        await createNode("create_text", {
+          parentId: card.id,
+          select: true,
+          text: "$49/mo",
+          fontFamily: "Inter",
+          fontStyle: "Bold",
+          fontSize: 40,
+        });
+        break;
+      }
+
+      case "sidebarShell": {
+        const section = await createSectionFrame(root, "Section / Sidebar App");
+        const shellWidth = sectionWidth - 40;
+        const shell = await createNode("create_frame", {
+          parentId: section.id,
+          select: false,
+          name: "Sidebar Shell",
+          width: shellWidth,
+          height: 560,
+          layoutMode: "HORIZONTAL",
+          itemSpacing: 16,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          cornerRadius: 12,
+        });
+        const sidebarWidth = Math.min(260, Math.max(180, Math.round(shellWidth * 0.22)));
+        await createNode("create_frame", {
+          parentId: shell.id,
+          select: false,
+          name: "Sidebar",
+          width: sidebarWidth,
+          height: 560,
+          layoutMode: "VERTICAL",
+          itemSpacing: 10,
+          paddingTop: 20,
+          paddingRight: 16,
+          paddingBottom: 20,
+          paddingLeft: 16,
+          fillR: 0.95,
+          fillG: 0.95,
+          fillB: 0.95,
+        });
+        await createNode("create_frame", {
+          parentId: shell.id,
+          select: true,
+          name: "Content",
+          width: Math.max(220, shellWidth - sidebarWidth - 16),
+          height: 560,
+          layoutMode: "VERTICAL",
+          itemSpacing: 16,
+          paddingTop: 24,
+          paddingRight: 24,
+          paddingBottom: 24,
+          paddingLeft: 24,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+        });
+        break;
+      }
+
+      case "modal": {
+        const section = await createSectionFrame(root, "Section / Modal");
+        const modal = await createNode("create_component", {
+          parentId: section.id,
+          select: false,
+          name: "Modal",
+          width: Math.min(640, sectionWidth - 40),
+          height: 260,
+          cornerRadius: 16,
+          fillR: 1,
+          fillG: 1,
+          fillB: 1,
+          layoutMode: "VERTICAL",
+          itemSpacing: 14,
+          paddingTop: 24,
+          paddingRight: 24,
+          paddingBottom: 24,
+          paddingLeft: 24,
+        });
+        await createNode("create_text", {
+          parentId: modal.id,
+          select: false,
+          text: "Modal title",
+          fontFamily: "Inter",
+          fontStyle: "Semibold",
+          fontSize: 28,
+        });
+        await createNode("create_text", {
+          parentId: modal.id,
+          select: true,
+          text: "Supporting details and action summary.",
+          fontFamily: "Inter",
+          fontStyle: "Regular",
+          fontSize: 16,
+        });
+        break;
+      }
+
+      default:
+        setLibraryMeta(`Unknown template: ${template}`, true);
+        return;
     }
-    setLibraryMeta(`Inserted ${template} template.`);
+
+    setLibraryMeta(`Inserted ${template} in ${root.name}.`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setLibraryMeta(`Template failed: ${message}`, true);
@@ -739,6 +1053,23 @@ useResearchNowBtn.addEventListener("click", () => {
   activatePage("chatPage");
   chatInput.focus();
   setChatMeta("Research context is active for next generation.");
+});
+
+createMainFrameBtn.addEventListener("click", () => {
+  void (async () => {
+    try {
+      const result = await ensureMainFrame(true);
+      setLibraryMeta(`${result.created ? "Created" : "Updated"} ${result.name} (${Math.round(result.width)}x${Math.round(result.height)}).`);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setLibraryMeta(`Main frame setup failed: ${message}`, true);
+    }
+  })();
+});
+
+clearMainFrameBtn.addEventListener("click", () => {
+  clearMainFrameTarget();
+  setLibraryMeta("Main frame target cleared. Select a frame or click Create / Use.");
 });
 
 for (const btn of navBtns) {
@@ -823,6 +1154,14 @@ if (storedResearch) researchContextInput.value = storedResearch;
 const storedProfile = localStorage.getItem(DESIGN_PROFILE_STORAGE_KEY);
 designProfileInput.value = storedProfile && storedProfile.trim() ? storedProfile : defaultDesignProfile;
 
+const storedMainFrameId = localStorage.getItem(MAIN_FRAME_ID_STORAGE_KEY);
+const storedMainFrameName = localStorage.getItem(MAIN_FRAME_NAME_STORAGE_KEY);
+if (storedMainFrameId && storedMainFrameName) {
+  mainFrameId = storedMainFrameId;
+  mainFrameName = storedMainFrameName;
+}
+updateMainFrameLabel();
+
 updateProviderUI();
 setAssistantOutput("CursorCanvas ready. Connect, then chat to generate designs directly on canvas.");
-setLibraryMeta("Templates and text styles insert directly in Figma.");
+setLibraryMeta("Create or select a main frame, then insert templates in a clean vertical stack.");

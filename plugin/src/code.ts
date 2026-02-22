@@ -38,6 +38,11 @@ function stringParam(params: Record<string, unknown>, key: string): string | und
   return typeof value === "string" ? value : undefined;
 }
 
+function booleanParam(params: Record<string, unknown>, key: string): boolean | undefined {
+  const value = params[key];
+  return typeof value === "boolean" ? value : undefined;
+}
+
 function enumParam<T extends string>(
   params: Record<string, unknown>,
   key: string,
@@ -73,6 +78,10 @@ function isSceneNode(node: BaseNode | null): node is SceneNode {
   return node != null && "type" in node && "visible" in node;
 }
 
+function isParentNode(node: BaseNode | null): node is BaseNode & ChildrenMixin {
+  return node != null && "appendChild" in node;
+}
+
 function isAutoLayoutNode(node: BaseNode | null): node is AutoLayoutNode {
   return node != null && (node.type === "FRAME" || node.type === "COMPONENT");
 }
@@ -87,19 +96,35 @@ function isCornerRadiusNode(node: BaseNode | null): node is SceneNode & { corner
 
 function pickParent(): BaseNode & ChildrenMixin {
   const sel = figma.currentPage.selection;
-  if (sel.length === 1 && "appendChild" in sel[0]) {
+  if (sel.length === 1 && isParentNode(sel[0])) {
     return sel[0] as BaseNode & ChildrenMixin;
   }
-  if (sel.length > 0 && sel[0].parent && "appendChild" in sel[0].parent) {
+  if (sel.length > 0 && isParentNode(sel[0].parent)) {
     return sel[0].parent as BaseNode & ChildrenMixin;
   }
   return figma.currentPage;
 }
 
-function appendAndFocus<T extends SceneNode>(node: T): T {
-  pickParent().appendChild(node);
-  figma.currentPage.selection = [node];
-  figma.viewport.scrollAndZoomIntoView([node]);
+function resolveParentNode(params: Record<string, unknown>): BaseNode & ChildrenMixin {
+  const parentId = stringParam(params, "parentId");
+  if (parentId) {
+    const target = figma.getNodeById(parentId);
+    if (!isParentNode(target)) {
+      throw new Error(`Invalid parentId: ${parentId}`);
+    }
+    return target;
+  }
+  return pickParent();
+}
+
+function appendAndFocus<T extends SceneNode>(node: T, params: Record<string, unknown>): T {
+  const parent = resolveParentNode(params);
+  parent.appendChild(node);
+  const shouldSelect = booleanParam(params, "select") ?? true;
+  if (shouldSelect) {
+    figma.currentPage.selection = [node];
+    figma.viewport.scrollAndZoomIntoView([node]);
+  }
   return node;
 }
 
@@ -164,11 +189,102 @@ function applyAutoLayoutSettings(node: AutoLayoutNode, params: Record<string, un
   if (counterAxisSizingMode) node.counterAxisSizingMode = counterAxisSizingMode;
 }
 
+type CanvasPreset = "desktop" | "tablet" | "mobile" | "letter" | "presentation";
+
+function getCanvasPreset(
+  raw: string | undefined
+): { key: CanvasPreset; label: string; width: number; height: number } {
+  const preset = raw === "tablet" || raw === "mobile" || raw === "letter" || raw === "presentation"
+    ? raw
+    : "desktop";
+
+  switch (preset) {
+    case "mobile":
+      return { key: "mobile", label: "Mobile", width: 390, height: 844 };
+    case "tablet":
+      return { key: "tablet", label: "Tablet", width: 834, height: 1194 };
+    case "letter":
+      return { key: "letter", label: "Letter 8.5x11", width: 816, height: 1056 };
+    case "presentation":
+      return { key: "presentation", label: "Presentation", width: 1366, height: 768 };
+    case "desktop":
+    default:
+      return { key: "desktop", label: "Desktop", width: 1440, height: 1024 };
+  }
+}
+
+function applyMainCanvasLayout(frame: FrameNode): void {
+  frame.layoutMode = "VERTICAL";
+  frame.primaryAxisSizingMode = "FIXED";
+  frame.counterAxisSizingMode = "FIXED";
+  frame.primaryAxisAlignItems = "MIN";
+  frame.counterAxisAlignItems = "MIN";
+  frame.itemSpacing = 24;
+  frame.paddingTop = 32;
+  frame.paddingRight = 32;
+  frame.paddingBottom = 32;
+  frame.paddingLeft = 32;
+  frame.clipsContent = false;
+}
+
 async function handleCommand(
   tool: string,
   params: Record<string, unknown>
 ): Promise<unknown> {
   switch (tool) {
+    case "ensure_canvas_frame": {
+      const preset = getCanvasPreset(stringParam(params, "preset"));
+      const requestedName = stringParam(params, "name") ?? `${preset.label} Canvas`;
+      const forcePreset = booleanParam(params, "forcePreset") ?? false;
+      const frameId = stringParam(params, "frameId");
+      const useSelectedFrame = booleanParam(params, "useSelectedFrame") ?? false;
+
+      let frame: FrameNode | null = null;
+      let created = false;
+
+      if (frameId) {
+        const existing = figma.getNodeById(frameId);
+        if (existing?.type === "FRAME") {
+          frame = existing;
+        }
+      }
+
+      if (!frame && useSelectedFrame) {
+        const selected = figma.currentPage.selection[0];
+        if (selected?.type === "FRAME") {
+          frame = selected;
+        }
+      }
+
+      if (!frame) {
+        frame = figma.createFrame();
+        frame.name = requestedName;
+        frame.resize(preset.width, preset.height);
+        const viewport = figma.viewport.center;
+        frame.x = viewport.x - preset.width / 2;
+        frame.y = viewport.y - preset.height / 2;
+        figma.currentPage.appendChild(frame);
+        created = true;
+      }
+
+      if (created || forcePreset) {
+        frame.resize(preset.width, preset.height);
+      }
+
+      frame.name = requestedName;
+      applyMainCanvasLayout(frame);
+      figma.currentPage.selection = [frame];
+      figma.viewport.scrollAndZoomIntoView([frame]);
+      return {
+        id: frame.id,
+        name: frame.name,
+        preset: preset.key,
+        width: frame.width,
+        height: frame.height,
+        created,
+      };
+    }
+
     case "create_frame": {
       const frame = figma.createFrame();
       frame.name = stringParam(params, "name") ?? "Frame";
@@ -186,7 +302,7 @@ async function handleCommand(
       if (cornerRadius != null) frame.cornerRadius = cornerRadius;
 
       applyAutoLayoutSettings(frame, params);
-      appendAndFocus(frame);
+      appendAndFocus(frame, params);
       return { id: frame.id, name: frame.name };
     }
 
@@ -207,7 +323,7 @@ async function handleCommand(
       if (cornerRadius != null) component.cornerRadius = cornerRadius;
 
       applyAutoLayoutSettings(component, params);
-      appendAndFocus(component);
+      appendAndFocus(component, params);
       return { id: component.id, name: component.name };
     }
 
@@ -235,7 +351,7 @@ async function handleCommand(
         setNodeFill(text, fill, opacity);
       }
 
-      appendAndFocus(text);
+      appendAndFocus(text, params);
       return { id: text.id, characters: text.characters };
     }
 
@@ -255,7 +371,7 @@ async function handleCommand(
       const cornerRadius = numberParam(params, "cornerRadius");
       if (cornerRadius != null) rect.cornerRadius = cornerRadius;
 
-      appendAndFocus(rect);
+      appendAndFocus(rect, params);
       return { id: rect.id, name: rect.name };
     }
 
@@ -272,7 +388,7 @@ async function handleCommand(
         setNodeFill(ellipse, fill, opacity);
       }
 
-      appendAndFocus(ellipse);
+      appendAndFocus(ellipse, params);
       return { id: ellipse.id, name: ellipse.name };
     }
 
@@ -294,7 +410,7 @@ async function handleCommand(
       const rotation = numberParam(params, "rotation");
       if (rotation != null) line.rotation = rotation;
 
-      appendAndFocus(line);
+      appendAndFocus(line, params);
       return { id: line.id, name: line.name };
     }
 
@@ -325,7 +441,7 @@ async function handleCommand(
         setNodeFill(polygon, fill, opacity);
       }
 
-      appendAndFocus(polygon);
+      appendAndFocus(polygon, params);
       return { id: polygon.id, name: polygon.name, sides: polygon.pointCount };
     }
 
@@ -356,7 +472,7 @@ async function handleCommand(
         setNodeFill(star, fill, opacity);
       }
 
-      appendAndFocus(star);
+      appendAndFocus(star, params);
       return { id: star.id, name: star.name, points: star.pointCount };
     }
 
