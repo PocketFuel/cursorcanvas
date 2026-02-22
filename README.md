@@ -6,13 +6,20 @@ CursorCanvas is a Figma plugin + local MCP bridge that lets you design by chatti
 
 ## What changed (new UX)
 
-- Chat-first plugin UI (single workflow in Figma)
+- Page-based plugin UI with vertical tabs:
+  - `Chat`
+  - `Research`
+  - `Library`
 - Provider selector:
   - `CursorCanvas Local (No credits)` - built-in local agent, no external API key
   - `Codex / OpenAI` - uses OpenAI Responses API with tool calling
   - `Cursor` / `Lovable` placeholders for upcoming connectors
 - Theme toggle (light/dark)
 - Auto-discovery of active localhost MCP port pairs
+- No design preview panel in plugin (Figma canvas is the preview)
+- Library page includes:
+  - predefined component templates
+  - typography style buttons (H1-H6, body, UI text) grouped by vertical tabs
 
 ## Quick start
 
@@ -42,8 +49,18 @@ pnpm run build
 
 5. In plugin:
 - Click `Connect`
-- Choose provider
-- Chat in the message box
+- Use pages:
+  - `Research`: save research brief + design profile/personalization
+  - `Library`: insert templates and text styles
+  - `Chat`: run generation with your selected provider
+
+## New workflow
+
+1. Open `Research` page and paste planning/research output.
+2. Keep or edit the default design profile (senior designer + shadcn + A/B/C variants).
+3. Open `Library` page and insert baseline structures (hero, nav, cards, type styles).
+4. Open `Chat`, choose provider, and prompt generation/refinement.
+5. Review directly on the Figma canvas, then iterate.
 
 ## Provider behavior
 

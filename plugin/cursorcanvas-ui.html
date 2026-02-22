@@ -10,35 +10,35 @@
     body.theme-dark {
       --bg-a: #0f0f10;
       --bg-b: #1a1a1b;
-      --panel: rgba(20, 20, 22, 0.9);
-      --panel-stroke: rgba(124, 124, 130, 0.32);
+      --panel: rgba(20, 20, 22, 0.92);
+      --stroke: rgba(130, 130, 137, 0.3);
       --text: #efefef;
-      --muted: #a2a2a8;
-      --input: rgba(12, 12, 14, 0.82);
-      --input-focus: rgba(34, 34, 38, 0.9);
+      --muted: #a1a1a8;
+      --input: rgba(12, 12, 14, 0.84);
+      --input-focus: rgba(31, 31, 35, 0.96);
       --accent: #ececef;
-      --accent-2: #d3d3d8;
+      --accent-2: #d0d0d6;
       --danger: #d88d8d;
       --ok: #8fb89a;
       --warn: #bba970;
-      --shadow: 0 16px 26px rgba(0, 0, 0, 0.36);
+      --shadow: 0 14px 24px rgba(0, 0, 0, 0.35);
     }
 
     body.theme-light {
       --bg-a: #f3f3f4;
       --bg-b: #e8e8eb;
-      --panel: rgba(255, 255, 255, 0.9);
-      --panel-stroke: rgba(152, 152, 159, 0.34);
+      --panel: rgba(255, 255, 255, 0.93);
+      --stroke: rgba(157, 157, 163, 0.34);
       --text: #1f1f22;
-      --muted: #65656e;
-      --input: rgba(245, 245, 247, 0.95);
+      --muted: #64646c;
+      --input: rgba(245, 245, 247, 0.96);
       --input-focus: rgba(235, 235, 238, 1);
-      --accent: #202024;
-      --accent-2: #111114;
+      --accent: #1f1f24;
+      --accent-2: #101014;
       --danger: #a14d4d;
       --ok: #4f7758;
       --warn: #8a7640;
-      --shadow: 0 12px 24px rgba(44, 44, 47, 0.14);
+      --shadow: 0 12px 22px rgba(43, 43, 47, 0.14);
     }
 
     * { box-sizing: border-box; }
@@ -46,45 +46,141 @@
     body {
       margin: 0;
       min-height: 100vh;
-      padding: 12px;
+      padding: 10px;
       font-family: "Avenir Next", "IBM Plex Sans", "Segoe UI", sans-serif;
       color: var(--text);
       background:
-        radial-gradient(circle at 8% 8%, rgba(170, 170, 175, 0.15), transparent 30%),
-        radial-gradient(circle at 88% 12%, rgba(125, 125, 130, 0.16), transparent 30%),
+        radial-gradient(circle at 10% 10%, rgba(170, 170, 176, 0.14), transparent 28%),
+        radial-gradient(circle at 88% 12%, rgba(125, 125, 132, 0.15), transparent 30%),
         linear-gradient(160deg, var(--bg-a), var(--bg-b));
-      display: flex;
-      flex-direction: column;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: 108px 1fr;
       gap: 10px;
+      min-height: calc(100vh - 20px);
     }
 
     .card {
       background: var(--panel);
-      border: 1px solid var(--panel-stroke);
+      border: 1px solid var(--stroke);
       border-radius: 14px;
       box-shadow: var(--shadow);
-      padding: 10px;
     }
 
-    .topbar {
+    .sidebar {
+      padding: 10px 8px;
       display: flex;
-      align-items: center;
-      justify-content: space-between;
+      flex-direction: column;
       gap: 8px;
     }
 
     .brand {
       margin: 0;
-      font-size: 16px;
+      font-size: 13px;
+      line-height: 1.2;
       letter-spacing: 0.02em;
       font-weight: 700;
+      text-align: center;
     }
 
-    .subtle {
-      margin: 4px 0 0;
-      color: var(--muted);
+    .nav-btn {
+      width: 100%;
+      border: 1px solid rgba(132, 132, 138, 0.34);
+      border-radius: 10px;
+      padding: 8px 7px;
       font-size: 11px;
-      line-height: 1.4;
+      font-weight: 700;
+      color: var(--text);
+      background: rgba(35, 35, 39, 0.7);
+      cursor: pointer;
+    }
+
+    body.theme-light .nav-btn {
+      background: rgba(239, 239, 242, 0.95);
+    }
+
+    .nav-btn.active {
+      border-color: rgba(176, 176, 184, 0.72);
+      background: linear-gradient(140deg, rgba(215, 215, 220, 0.35), rgba(152, 152, 159, 0.2));
+    }
+
+    .sidebar .spacer { flex: 1; }
+
+    .theme-btn {
+      border: 1px solid rgba(132, 132, 138, 0.34);
+      border-radius: 10px;
+      padding: 8px 6px;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .size-controls {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+    }
+
+    .size-btn {
+      border: 1px solid rgba(132, 132, 138, 0.34);
+      border-radius: 10px;
+      padding: 6px 0;
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text);
+      background: transparent;
+      cursor: pointer;
+    }
+
+    .size-label {
+      text-align: center;
+      font-size: 10px;
+      color: var(--muted);
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .main {
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      overflow: hidden;
+    }
+
+    .page {
+      display: none;
+      flex-direction: column;
+      gap: 8px;
+      min-height: 0;
+    }
+
+    .page.active {
+      display: flex;
+    }
+
+    .section {
+      border: 1px solid rgba(127, 127, 133, 0.3);
+      border-radius: 12px;
+      padding: 9px;
+      background: rgba(16, 16, 18, 0.45);
+    }
+
+    body.theme-light .section {
+      background: rgba(248, 248, 250, 0.8);
+    }
+
+    .title {
+      margin: 0 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
 
     .row {
@@ -104,10 +200,10 @@
     label {
       font-size: 10px;
       text-transform: uppercase;
-      letter-spacing: 0.06em;
+      letter-spacing: 0.05em;
       color: var(--muted);
-      margin-bottom: 4px;
       display: block;
+      margin-bottom: 4px;
     }
 
     input, select, textarea, button {
@@ -118,66 +214,58 @@
 
     input, select, textarea {
       width: 100%;
-      padding: 8px 10px;
-      border: 1px solid rgba(132, 132, 139, 0.35);
+      border: 1px solid rgba(130, 130, 136, 0.36);
       background: var(--input);
       color: var(--text);
+      padding: 8px 10px;
     }
 
     textarea {
-      resize: none;
-      min-height: 74px;
+      resize: vertical;
+      min-height: 80px;
       line-height: 1.35;
     }
 
     input:focus, select:focus, textarea:focus {
       outline: none;
+      border-color: rgba(182, 182, 190, 0.82);
       background: var(--input-focus);
-      border-color: rgba(184, 184, 192, 0.8);
-      box-shadow: 0 0 0 3px rgba(148, 148, 156, 0.2);
+      box-shadow: 0 0 0 3px rgba(145, 145, 154, 0.2);
     }
 
     button {
-      border: 1px solid rgba(130, 130, 138, 0.4);
-      background: linear-gradient(140deg, var(--accent), var(--accent-2));
+      border: 1px solid rgba(130, 130, 138, 0.38);
+      background: linear-gradient(135deg, var(--accent), var(--accent-2));
       color: var(--bg-a);
       font-weight: 700;
-      padding: 8px 12px;
+      padding: 8px 11px;
       cursor: pointer;
     }
 
-    button:hover:not(:disabled) {
-      filter: brightness(1.02);
-      transform: translateY(-1px);
-    }
-
     button.ghost {
-      background: rgba(35, 35, 39, 0.75);
+      background: rgba(35, 35, 39, 0.72);
       color: var(--text);
     }
 
     body.theme-light button.ghost {
-      background: rgba(237, 237, 240, 0.95);
+      background: rgba(239, 239, 242, 0.95);
       color: var(--text);
     }
 
-    button:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-      transform: none;
-    }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 
     .status {
-      margin-top: 8px;
+      margin-top: 7px;
       display: inline-flex;
-      gap: 6px;
       align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 5px 8px;
       font-size: 10px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: 0.05em;
-      border-radius: 999px;
-      padding: 6px 9px;
       border: 1px solid transparent;
     }
 
@@ -186,140 +274,288 @@
       width: 7px;
       height: 7px;
       border-radius: 50%;
+      background: currentColor;
     }
 
     .status.disconnected {
       color: var(--danger);
-      border-color: rgba(178, 103, 103, 0.45);
+      border-color: rgba(178, 103, 103, 0.44);
       background: rgba(144, 80, 80, 0.2);
     }
-    .status.disconnected::before { background: var(--danger); }
 
     .status.connected {
       color: var(--ok);
-      border-color: rgba(121, 160, 129, 0.45);
+      border-color: rgba(121, 160, 129, 0.44);
       background: rgba(95, 127, 102, 0.2);
     }
-    .status.connected::before { background: var(--ok); }
 
     .status.connecting {
       color: var(--warn);
-      border-color: rgba(173, 149, 91, 0.45);
+      border-color: rgba(173, 149, 91, 0.44);
       background: rgba(143, 123, 71, 0.2);
     }
-    .status.connecting::before { background: var(--warn); }
 
     .error {
-      margin-top: 8px;
+      margin-top: 6px;
       min-height: 14px;
       color: var(--danger);
       font-size: 11px;
       line-height: 1.35;
     }
 
-    .chat-log {
-      height: 280px;
+    .note {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.35;
+    }
+
+    .response-box {
+      min-height: 84px;
+      max-height: 180px;
       overflow: auto;
-      border-radius: 12px;
-      border: 1px solid rgba(126, 126, 133, 0.3);
-      background: rgba(11, 11, 13, 0.58);
-      padding: 9px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    body.theme-light .chat-log {
-      background: rgba(241, 241, 244, 0.8);
-    }
-
-    .bubble {
-      padding: 8px 9px;
+      border: 1px solid rgba(130, 130, 136, 0.34);
       border-radius: 10px;
+      background: rgba(15, 15, 17, 0.46);
+      padding: 8px;
       font-size: 11px;
       white-space: pre-wrap;
       line-height: 1.35;
     }
 
-    .bubble.user {
-      align-self: flex-end;
-      max-width: 82%;
-      background: rgba(153, 153, 160, 0.26);
-      border: 1px solid rgba(160, 160, 167, 0.32);
-    }
-
-    .bubble.assistant {
-      align-self: flex-start;
-      max-width: 88%;
-      background: rgba(80, 113, 90, 0.16);
-      border: 1px solid rgba(132, 172, 143, 0.32);
-    }
-
-    body.theme-light .bubble.assistant {
-      background: rgba(97, 134, 107, 0.15);
-    }
-
-    .meta {
-      color: var(--muted);
-      font-size: 10px;
-      margin-top: 6px;
+    body.theme-light .response-box {
+      background: rgba(248, 248, 250, 0.86);
     }
 
     .hidden { display: none; }
 
-    @media (max-width: 390px) {
-      .row { flex-direction: column; }
+    .library-layout {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      gap: 8px;
+      min-height: 0;
+      flex: 1;
+    }
+
+    .vert-tabs {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .vert-tab {
+      border: 1px solid rgba(130, 130, 138, 0.36);
+      background: rgba(34, 34, 38, 0.7);
+      color: var(--text);
+      border-radius: 9px;
+      padding: 7px 8px;
+      font-size: 11px;
+      font-weight: 700;
+      text-align: left;
+      cursor: pointer;
+    }
+
+    body.theme-light .vert-tab {
+      background: rgba(239, 239, 242, 0.95);
+    }
+
+    .vert-tab.active {
+      border-color: rgba(179, 179, 186, 0.75);
+    }
+
+    .lib-panel {
+      border: 1px solid rgba(130, 130, 136, 0.32);
+      border-radius: 10px;
+      padding: 8px;
+      display: none;
+      min-height: 0;
+      overflow: auto;
+    }
+
+    .lib-panel.active { display: block; }
+
+    .button-list {
+      display: grid;
+      gap: 7px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .button-list button {
+      text-align: left;
+      font-size: 11px;
+      padding: 8px;
+    }
+
+    .type-layout {
+      display: grid;
+      grid-template-columns: 112px 1fr;
+      gap: 8px;
+    }
+
+    .type-group { display: none; }
+    .type-group.active { display: block; }
+
+    @media (max-width: 430px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+      .sidebar {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+      }
+      .sidebar .spacer { display: none; }
+      .library-layout, .type-layout {
+        grid-template-columns: 1fr;
+      }
+      .button-list { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
-  <section class="card">
-    <div class="topbar">
+  <div class="app">
+    <aside class="sidebar card">
       <h1 class="brand">CursorCanvas</h1>
-      <button id="themeToggle" class="ghost" type="button">Light Mode</button>
-    </div>
-    <p class="subtle">Chat directly in Figma and let CursorCanvas run design actions on canvas.</p>
-
-    <label for="url">MCP URL</label>
-    <div class="row">
-      <input id="url" class="grow" type="text" value="ws://localhost:3055">
-      <button id="connect" type="button">Connect</button>
-    </div>
-    <div id="status" class="status disconnected">Disconnected</div>
-    <div id="error" class="error"></div>
-  </section>
-
-  <section class="card col">
-    <div class="row">
-      <div class="grow">
-        <label for="providerSelect">Provider</label>
-        <select id="providerSelect">
-          <option value="local">CursorCanvas Local (No credits)</option>
-          <option value="openai">Codex / OpenAI</option>
-          <option value="cursor">Cursor (coming soon)</option>
-          <option value="lovable">Lovable (coming soon)</option>
-        </select>
+      <button class="nav-btn active" data-page-target="chatPage" type="button">Chat</button>
+      <button class="nav-btn" data-page-target="researchPage" type="button">Research</button>
+      <button class="nav-btn" data-page-target="libraryPage" type="button">Library</button>
+      <div class="spacer"></div>
+      <div class="size-controls">
+        <button id="sizeDown" class="size-btn" type="button">-</button>
+        <button id="sizeUp" class="size-btn" type="button">+</button>
       </div>
-      <div class="grow">
-        <label for="modelInput">Model</label>
-        <input id="modelInput" type="text" value="gpt-5-mini">
-      </div>
-    </div>
+      <div id="sizeLabel" class="size-label">Size 100%</div>
+      <button id="themeToggle" class="theme-btn" type="button">Light Mode</button>
+    </aside>
 
-    <div id="apiKeyRow" class="hidden">
-      <label for="apiKeyInput">OpenAI API Key</label>
-      <input id="apiKeyInput" type="password" placeholder="sk-...">
-    </div>
+    <main class="main card">
+      <section id="chatPage" class="page active">
+        <div class="section">
+          <h2 class="title">Connection</h2>
+          <label for="url">MCP URL</label>
+          <div class="row">
+            <input id="url" class="grow" type="text" value="ws://localhost:3055">
+            <button id="connect" type="button">Connect</button>
+          </div>
+          <div id="status" class="status disconnected">Disconnected</div>
+          <div id="error" class="error"></div>
+        </div>
 
-    <div id="chatLog" class="chat-log"></div>
-    <div id="chatMeta" class="meta">Local provider works without external credits.</div>
-    <textarea id="chatInput" placeholder="Ask CursorCanvas to design something in Figma..."></textarea>
-    <div class="row">
-      <button id="sendChat" class="grow" type="button">Send</button>
-      <button id="clearChat" class="ghost" type="button">Clear</button>
-    </div>
-  </section>
+        <div class="section">
+          <h2 class="title">Agent</h2>
+          <div class="row">
+            <div class="grow">
+              <label for="providerSelect">Provider</label>
+              <select id="providerSelect">
+                <option value="local">CursorCanvas Local (No credits)</option>
+                <option value="openai">Codex / OpenAI</option>
+                <option value="cursor">Cursor (coming soon)</option>
+                <option value="lovable">Lovable (coming soon)</option>
+              </select>
+            </div>
+            <div class="grow">
+              <label for="modelInput">Model</label>
+              <input id="modelInput" type="text" value="gpt-5-mini">
+            </div>
+          </div>
+          <div id="apiKeyRow" class="hidden">
+            <label for="apiKeyInput">OpenAI API Key</label>
+            <input id="apiKeyInput" type="password" placeholder="sk-...">
+          </div>
+          <p id="chatMeta" class="note">Local provider works without external credits.</p>
+        </div>
 
+        <div class="section">
+          <h2 class="title">Prompt</h2>
+          <textarea id="chatInput" placeholder="Ask CursorCanvas to generate or refine UI directly in Figma..."></textarea>
+          <div class="row">
+            <button id="sendChat" class="grow" type="button">Send</button>
+            <button id="clearChat" class="ghost" type="button">Clear</button>
+          </div>
+          <div id="assistantOutput" class="response-box"></div>
+        </div>
+      </section>
+
+      <section id="researchPage" class="page">
+        <div class="section">
+          <h2 class="title">Design Research Brief</h2>
+          <label for="researchContext">Research context, planning insights, constraints, user goals</label>
+          <textarea id="researchContext" placeholder="Paste research summary, JTBD, constraints, target platform, and success criteria."></textarea>
+          <label for="designProfile">Design profile (applied to every generation)</label>
+          <textarea id="designProfile"></textarea>
+          <div class="row">
+            <button id="saveResearch" type="button">Save Research</button>
+            <button id="useResearchNow" class="ghost" type="button">Use In Chat</button>
+          </div>
+          <p id="researchMeta" class="note">This context will be included in chat requests to keep generation aligned with your design workflow.</p>
+        </div>
+      </section>
+
+      <section id="libraryPage" class="page">
+        <div class="section grow col">
+          <h2 class="title">Templates & Type</h2>
+          <div class="library-layout">
+            <div class="vert-tabs">
+              <button class="vert-tab active" data-library-target="componentsPanel" type="button">Components</button>
+              <button class="vert-tab" data-library-target="typographyPanel" type="button">Typography</button>
+            </div>
+
+            <div id="componentsPanel" class="lib-panel active">
+              <div class="button-list">
+                <button type="button" data-component-template="hero">Hero Section</button>
+                <button type="button" data-component-template="navbar">Top Navigation</button>
+                <button type="button" data-component-template="featureGrid">Feature Grid</button>
+                <button type="button" data-component-template="pricingCard">Pricing Card</button>
+                <button type="button" data-component-template="sidebarShell">Sidebar App Shell</button>
+                <button type="button" data-component-template="modal">Modal Dialog</button>
+              </div>
+            </div>
+
+            <div id="typographyPanel" class="lib-panel">
+              <div class="type-layout">
+                <div class="vert-tabs">
+                  <button class="vert-tab active" data-type-target="headingsGroup" type="button">Headings</button>
+                  <button class="vert-tab" data-type-target="bodyGroup" type="button">Body</button>
+                  <button class="vert-tab" data-type-target="uiGroup" type="button">UI</button>
+                </div>
+
+                <div class="col">
+                  <div id="headingsGroup" class="type-group active">
+                    <div class="button-list">
+                      <button type="button" data-text-style='{"label":"H1","fontSize":64,"fontStyle":"Bold","text":"Heading 1"}'>H1 64/Bold</button>
+                      <button type="button" data-text-style='{"label":"H2","fontSize":48,"fontStyle":"Bold","text":"Heading 2"}'>H2 48/Bold</button>
+                      <button type="button" data-text-style='{"label":"H3","fontSize":36,"fontStyle":"Semibold","text":"Heading 3"}'>H3 36/Semibold</button>
+                      <button type="button" data-text-style='{"label":"H4","fontSize":30,"fontStyle":"Semibold","text":"Heading 4"}'>H4 30/Semibold</button>
+                      <button type="button" data-text-style='{"label":"H5","fontSize":24,"fontStyle":"Medium","text":"Heading 5"}'>H5 24/Medium</button>
+                      <button type="button" data-text-style='{"label":"H6","fontSize":20,"fontStyle":"Medium","text":"Heading 6"}'>H6 20/Medium</button>
+                    </div>
+                  </div>
+
+                  <div id="bodyGroup" class="type-group">
+                    <div class="button-list">
+                      <button type="button" data-text-style='{"label":"Body Large","fontSize":18,"fontStyle":"Regular","text":"Body Large"}'>Body L 18</button>
+                      <button type="button" data-text-style='{"label":"Body","fontSize":16,"fontStyle":"Regular","text":"Body"}'>Body 16</button>
+                      <button type="button" data-text-style='{"label":"Body Small","fontSize":14,"fontStyle":"Regular","text":"Body Small"}'>Body S 14</button>
+                      <button type="button" data-text-style='{"label":"Caption","fontSize":12,"fontStyle":"Regular","text":"Caption"}'>Caption 12</button>
+                    </div>
+                  </div>
+
+                  <div id="uiGroup" class="type-group">
+                    <div class="button-list">
+                      <button type="button" data-text-style='{"label":"Button Large","fontSize":16,"fontStyle":"Medium","text":"Button"}'>Button L 16</button>
+                      <button type="button" data-text-style='{"label":"Button","fontSize":14,"fontStyle":"Medium","text":"Button"}'>Button 14</button>
+                      <button type="button" data-text-style='{"label":"Label","fontSize":12,"fontStyle":"Medium","text":"Label"}'>Label 12/Med</button>
+                      <button type="button" data-text-style='{"label":"Overline","fontSize":11,"fontStyle":"Medium","text":"OVERLINE"}'>Overline 11</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <p id="libraryMeta" class="note">Templates generate directly on canvas. The canvas is the live preview.</p>
+        </div>
+      </section>
+    </main>
+  </div>
   <script src="./dist/ui.js"></script>
 </body>
 </html>

@@ -9,16 +9,35 @@ const connectBtn = byId<HTMLButtonElement>("connect");
 const statusEl = byId<HTMLDivElement>("status");
 const errorEl = byId<HTMLDivElement>("error");
 const themeToggleBtn = byId<HTMLButtonElement>("themeToggle");
+const sizeDownBtn = byId<HTMLButtonElement>("sizeDown");
+const sizeUpBtn = byId<HTMLButtonElement>("sizeUp");
+const sizeLabelEl = byId<HTMLDivElement>("sizeLabel");
 
 const providerSelect = byId<HTMLSelectElement>("providerSelect");
 const modelInput = byId<HTMLInputElement>("modelInput");
 const apiKeyRow = byId<HTMLDivElement>("apiKeyRow");
 const apiKeyInput = byId<HTMLInputElement>("apiKeyInput");
-const chatLog = byId<HTMLDivElement>("chatLog");
 const chatInput = byId<HTMLTextAreaElement>("chatInput");
 const sendChatBtn = byId<HTMLButtonElement>("sendChat");
 const clearChatBtn = byId<HTMLButtonElement>("clearChat");
-const chatMetaEl = byId<HTMLDivElement>("chatMeta");
+const chatMetaEl = byId<HTMLParagraphElement>("chatMeta");
+const assistantOutputEl = byId<HTMLDivElement>("assistantOutput");
+
+const researchContextInput = byId<HTMLTextAreaElement>("researchContext");
+const designProfileInput = byId<HTMLTextAreaElement>("designProfile");
+const saveResearchBtn = byId<HTMLButtonElement>("saveResearch");
+const useResearchNowBtn = byId<HTMLButtonElement>("useResearchNow");
+const researchMetaEl = byId<HTMLParagraphElement>("researchMeta");
+const libraryMetaEl = byId<HTMLParagraphElement>("libraryMeta");
+
+const navBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-page-target]"));
+const pages = Array.from(document.querySelectorAll<HTMLElement>(".page"));
+const libraryTabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-library-target]"));
+const libraryPanels = Array.from(document.querySelectorAll<HTMLElement>(".lib-panel"));
+const typeTabs = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-type-target]"));
+const typeGroups = Array.from(document.querySelectorAll<HTMLElement>(".type-group"));
+const templateBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-component-template]"));
+const textStyleBtns = Array.from(document.querySelectorAll<HTMLButtonElement>("[data-text-style]"));
 
 interface PendingRequest {
   resolve: (value: unknown) => void;
@@ -47,7 +66,7 @@ interface ChatResponse {
   assistant: string;
   provider: string;
   model?: string;
-  toolCalls?: Array<{ tool: string; params: Record<string, unknown> }>;
+  toolCalls?: Array<{ tool: string; params: Record<string, unknown>; error?: string }>;
 }
 
 const pending = new Map<string, PendingRequest>();
@@ -63,8 +82,27 @@ const DEFAULT_WS_URL = "ws://localhost:3055";
 const LOCAL_HTTP_MIN = 3056;
 const LOCAL_HTTP_MAX = 3080;
 const PORT_SCAN_TIMEOUT_MS = 420;
+
 const THEME_STORAGE_KEY = "cursorcanvas_theme";
+const UI_SCALE_STORAGE_KEY = "cursorcanvas_ui_scale";
 const API_KEY_STORAGE_KEY = "cursorcanvas_openai_key";
+const RESEARCH_CONTEXT_STORAGE_KEY = "cursorcanvas_research_context";
+const DESIGN_PROFILE_STORAGE_KEY = "cursorcanvas_design_profile";
+const BASE_UI_WIDTH = 460;
+const BASE_UI_HEIGHT = 820;
+const MIN_UI_SCALE = 1;
+const MAX_UI_SCALE = 2;
+const UI_SCALE_STEP = 0.25;
+
+let uiScale = MIN_UI_SCALE;
+
+const defaultDesignProfile = [
+  "You are a senior product designer and UI engineer specialized in translating references into production-ready Figma output using 2025-2026 patterns.",
+  "Use shadcn-style token architecture and robust Auto Layout by default.",
+  "For each major request, think in A/B/C variants: faithful, refined, and bold exploration.",
+  "Prioritize hierarchy, spacing rhythm, accessibility, and component reusability.",
+  "When uncertain, ask concise clarifying questions and choose a practical default.",
+].join("\n");
 
 function setStatus(kind: "disconnected" | "connected" | "connecting", text: string) {
   statusEl.className = `status ${kind}`;
@@ -75,8 +113,21 @@ function setError(msg: string) {
   errorEl.textContent = msg;
 }
 
-function setMeta(text: string) {
+function setChatMeta(text: string) {
   chatMetaEl.textContent = text;
+}
+
+function setResearchMeta(text: string) {
+  researchMetaEl.textContent = text;
+}
+
+function setLibraryMeta(text: string, isError = false) {
+  libraryMetaEl.textContent = text;
+  libraryMetaEl.style.color = isError ? "#d88d8d" : "";
+}
+
+function setAssistantOutput(text: string) {
+  assistantOutputEl.textContent = text;
 }
 
 function applyTheme(theme: "dark" | "light") {
@@ -86,6 +137,32 @@ function applyTheme(theme: "dark" | "light") {
   localStorage.setItem(THEME_STORAGE_KEY, theme);
 }
 
+function normalizeScale(value: number): number {
+  const clamped = Math.min(MAX_UI_SCALE, Math.max(MIN_UI_SCALE, value));
+  return Math.round(clamped * 100) / 100;
+}
+
+function setUiScaleLabel(scale: number) {
+  sizeLabelEl.textContent = `Size ${Math.round(scale * 100)}%`;
+  sizeDownBtn.disabled = scale <= MIN_UI_SCALE;
+  sizeUpBtn.disabled = scale >= MAX_UI_SCALE;
+}
+
+async function applyUiScale(scale: number) {
+  const normalized = normalizeScale(scale);
+  const width = Math.round(BASE_UI_WIDTH * normalized);
+  const height = Math.round(BASE_UI_HEIGHT * normalized);
+  try {
+    await callPluginCommand("resize_ui", { width, height }, 10000);
+    uiScale = normalized;
+    setUiScaleLabel(normalized);
+    localStorage.setItem(UI_SCALE_STORAGE_KEY, String(normalized));
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setError(`Resize failed: ${message}`);
+  }
+}
+
 function updateProviderUI() {
   const provider = providerSelect.value;
   const openai = provider === "openai";
@@ -93,25 +170,39 @@ function updateProviderUI() {
   modelInput.disabled = !openai;
 
   if (provider === "local") {
-    setMeta("Local provider runs in CursorCanvas server and does not require credits.");
+    setChatMeta("Local provider runs in CursorCanvas server and does not require credits.");
   } else if (provider === "openai") {
-    setMeta("OpenAI provider uses function calls and executes actions directly in Figma.");
+    setChatMeta("OpenAI provider uses tool-calling to generate and execute design actions in Figma.");
   } else {
-    setMeta(`${provider} connector is coming soon. Use Local or OpenAI right now.`);
+    setChatMeta(`${provider} connector is planned. Use Local or OpenAI for now.`);
   }
 }
 
-function addChatBubble(role: "user" | "assistant", text: string) {
-  const bubble = document.createElement("div");
-  bubble.className = `bubble ${role}`;
-  bubble.textContent = text;
-  chatLog.appendChild(bubble);
-  chatLog.scrollTop = chatLog.scrollHeight;
+function activatePage(pageId: string) {
+  for (const btn of navBtns) {
+    btn.classList.toggle("active", btn.dataset.pageTarget === pageId);
+  }
+  for (const page of pages) {
+    page.classList.toggle("active", page.id === pageId);
+  }
 }
 
-function clearChat() {
-  chatHistory.length = 0;
-  chatLog.innerHTML = "";
+function activateLibraryPanel(panelId: string) {
+  for (const btn of libraryTabs) {
+    btn.classList.toggle("active", btn.dataset.libraryTarget === panelId);
+  }
+  for (const panel of libraryPanels) {
+    panel.classList.toggle("active", panel.id === panelId);
+  }
+}
+
+function activateTypeGroup(groupId: string) {
+  for (const btn of typeTabs) {
+    btn.classList.toggle("active", btn.dataset.typeTarget === groupId);
+  }
+  for (const group of typeGroups) {
+    group.classList.toggle("active", group.id === groupId);
+  }
 }
 
 function makeRequestId(prefix: string): string {
@@ -136,6 +227,13 @@ function createPendingRequest(id: string, timeoutMs = 30000): Promise<unknown> {
     }, timeoutMs);
     pending.set(id, { resolve, reject, timeout });
   });
+}
+
+function callPluginCommand(tool: string, params: Record<string, unknown>, timeoutMs = 30000): Promise<unknown> {
+  const id = makeRequestId("ui");
+  const promise = createPendingRequest(id, timeoutMs);
+  parent.postMessage({ pluginMessage: { type: "command", id, tool, params } }, "*");
+  return promise;
 }
 
 window.onmessage = (event: MessageEvent) => {
@@ -230,10 +328,7 @@ async function runHttpPollLoop(baseUrl: string) {
       if (!id || !tool) continue;
 
       const promise = createPendingRequest(id, 30000);
-      parent.postMessage(
-        { pluginMessage: { type: "command", id, tool, params: params ?? {} } },
-        "*"
-      );
+      parent.postMessage({ pluginMessage: { type: "command", id, tool, params: params ?? {} } }, "*");
 
       try {
         const result = await promise;
@@ -341,7 +436,7 @@ async function connect() {
   };
 
   ws.onerror = () => {
-    setError("Connection error. Click Connect again to retry auto-discovery.");
+    setError("Connection error. Click Connect again.");
   };
 
   ws.onmessage = async (event: MessageEvent) => {
@@ -353,11 +448,7 @@ async function connect() {
       if (!id || !tool) return;
 
       const promise = createPendingRequest(id, 30000);
-      parent.postMessage(
-        { pluginMessage: { type: "command", id, tool, params: params ?? {} } },
-        "*"
-      );
-
+      parent.postMessage({ pluginMessage: { type: "command", id, tool, params: params ?? {} } }, "*");
       const result = await promise;
       if (ws) ws.send(JSON.stringify({ id, result }));
     } catch (err) {
@@ -376,12 +467,17 @@ function getChatBaseUrl(): string {
   return wsUrlToHttpPollUrl(urlInput.value.trim() || DEFAULT_WS_URL);
 }
 
-async function postChat(body: unknown, baseUrl: string): Promise<Response> {
-  return fetch(baseUrl + "/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+function getResearchPayload(): { researchContext: string; designProfile: string } {
+  return {
+    researchContext: researchContextInput.value.trim(),
+    designProfile: designProfileInput.value.trim(),
+  };
+}
+
+function saveResearchState() {
+  localStorage.setItem(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
+  localStorage.setItem(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
+  setResearchMeta("Research brief saved.");
 }
 
 async function sendChat() {
@@ -394,17 +490,16 @@ async function sendChat() {
 
   const provider = providerSelect.value;
   if (provider === "cursor" || provider === "lovable") {
-    addChatBubble("assistant", `${provider} connector is not implemented yet. Use CursorCanvas Local or Codex/OpenAI.`);
-    setMeta(`${provider} connector coming soon.`);
+    setAssistantOutput(`${provider} connector is not available yet. Use CursorCanvas Local or Codex/OpenAI.`);
+    setChatMeta(`${provider} connector is planned.`);
     return;
   }
 
-  const message: ChatMessage = { role: "user", content: text };
-  chatHistory.push(message);
-  addChatBubble("user", text);
+  chatHistory.push({ role: "user", content: text });
   chatInput.value = "";
   sendChatBtn.disabled = true;
   setError("");
+  setAssistantOutput("Thinking...");
 
   try {
     const body = {
@@ -413,60 +508,187 @@ async function sendChat() {
       apiKey: provider === "openai" ? apiKeyInput.value.trim() || undefined : undefined,
       message: text,
       conversation: chatHistory.slice(-20),
+      ...getResearchPayload(),
     };
 
-    let chatBaseUrl = getChatBaseUrl();
-    let res: Response;
-    try {
-      res = await postChat(body, chatBaseUrl);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      const discoveredUrl = await discoverLocalWsUrl(urlInput.value.trim() || DEFAULT_WS_URL);
-      if (discoveredUrl && discoveredUrl !== urlInput.value.trim()) {
-        urlInput.value = discoveredUrl;
-      }
-      if (discoveredUrl) {
-        chatBaseUrl = wsUrlToHttpPollUrl(discoveredUrl);
-        httpBaseUrl = chatBaseUrl;
-        try {
-          res = await postChat(body, chatBaseUrl);
-        } catch {
-          throw new Error(`${msg} (chat endpoint: ${chatBaseUrl}/chat)`);
-        }
-      } else {
-        throw new Error(`${msg} (chat endpoint: ${chatBaseUrl}/chat)`);
-      }
-    }
+    const res = await fetch(getChatBaseUrl() + "/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
 
-    const textBody = await res.text();
+    const raw = await res.text();
     let data: ChatResponse | { error?: string };
     try {
-      data = textBody ? (JSON.parse(textBody) as ChatResponse | { error?: string }) : {};
+      data = raw ? (JSON.parse(raw) as ChatResponse | { error?: string }) : {};
     } catch {
       data = {};
     }
 
     if (!res.ok) {
-      const errMsg = "error" in data && data.error ? data.error : `Server error ${res.status}`;
-      setError(errMsg);
-      addChatBubble("assistant", `Error: ${errMsg}`);
+      const message = "error" in data && data.error ? data.error : `Server error ${res.status}`;
+      setError(message);
+      setAssistantOutput(`Error: ${message}`);
       return;
     }
 
-    const assistant = "assistant" in data && typeof data.assistant === "string"
+    const assistantText = "assistant" in data && typeof data.assistant === "string"
       ? data.assistant
       : "Done.";
-    chatHistory.push({ role: "assistant", content: assistant });
-    addChatBubble("assistant", assistant);
+    chatHistory.push({ role: "assistant", content: assistantText });
+    setAssistantOutput(assistantText);
 
-    const toolsUsed = "toolCalls" in data && Array.isArray(data.toolCalls) ? data.toolCalls.length : 0;
-    setMeta(`${provider} responded${toolsUsed > 0 ? ` and ran ${toolsUsed} tool${toolsUsed > 1 ? "s" : ""}` : ""}.`);
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    setError(`Chat request failed: ${msg}`);
-    addChatBubble("assistant", `Error: ${msg}`);
+    const toolCalls = "toolCalls" in data && Array.isArray(data.toolCalls) ? data.toolCalls : [];
+    setChatMeta(`${provider} completed with ${toolCalls.length} tool call${toolCalls.length === 1 ? "" : "s"}.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setError(`Chat request failed: ${message}`);
+    setAssistantOutput(`Error: ${message}`);
   } finally {
     sendChatBtn.disabled = false;
+  }
+}
+
+function clearChat() {
+  chatHistory.length = 0;
+  setAssistantOutput("");
+  setChatMeta("Chat cleared.");
+}
+
+async function createTextStyle(raw: string) {
+  try {
+    const style = JSON.parse(raw) as { label?: string; fontSize?: number; fontStyle?: string; text?: string };
+    const params: Record<string, unknown> = {
+      name: style.label ?? "Text Style",
+      text: style.text ?? style.label ?? "Text",
+      fontFamily: "Inter",
+      fontStyle: style.fontStyle ?? "Regular",
+      fontSize: style.fontSize ?? 16,
+      fillR: 0.12,
+      fillG: 0.12,
+      fillB: 0.12,
+    };
+    await callPluginCommand("create_text", params, 20000);
+    setLibraryMeta(`Inserted ${style.label ?? "text style"} on canvas.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setLibraryMeta(`Failed to insert text style: ${message}`, true);
+  }
+}
+
+async function runTemplate(template: string) {
+  const steps: Array<{ tool: string; params: Record<string, unknown> }> = [];
+
+  switch (template) {
+    case "hero":
+      steps.push(
+        {
+          tool: "create_frame",
+          params: {
+            name: "Hero Section",
+            width: 1200,
+            height: 680,
+            layoutMode: "VERTICAL",
+            itemSpacing: 20,
+            paddingTop: 48,
+            paddingRight: 48,
+            paddingBottom: 48,
+            paddingLeft: 48,
+          },
+        },
+        { tool: "create_text", params: { text: "Hero headline", fontFamily: "Inter", fontStyle: "Bold", fontSize: 56 } },
+        { tool: "create_text", params: { text: "Supporting subheadline copy", fontFamily: "Inter", fontStyle: "Regular", fontSize: 20 } },
+        { tool: "create_component", params: { name: "Button / Primary", width: 180, height: 52, cornerRadius: 12, fillR: 0.2, fillG: 0.2, fillB: 0.2 } }
+      );
+      break;
+    case "navbar":
+      steps.push(
+        {
+          tool: "create_frame",
+          params: {
+            name: "Navbar",
+            width: 1200,
+            height: 72,
+            layoutMode: "HORIZONTAL",
+            itemSpacing: 20,
+            paddingTop: 16,
+            paddingRight: 24,
+            paddingBottom: 16,
+            paddingLeft: 24,
+            primaryAxisAlignItems: "SPACE_BETWEEN",
+            counterAxisAlignItems: "CENTER",
+          },
+        },
+        { tool: "create_text", params: { text: "Brand", fontFamily: "Inter", fontStyle: "Bold", fontSize: 20 } },
+        { tool: "create_text", params: { text: "Navigation", fontFamily: "Inter", fontStyle: "Medium", fontSize: 14 } }
+      );
+      break;
+    case "featureGrid":
+      steps.push(
+        {
+          tool: "create_frame",
+          params: {
+            name: "Feature Grid",
+            width: 1100,
+            height: 620,
+            layoutMode: "VERTICAL",
+            itemSpacing: 16,
+            paddingTop: 24,
+            paddingRight: 24,
+            paddingBottom: 24,
+            paddingLeft: 24,
+          },
+        },
+        { tool: "create_text", params: { text: "Feature highlights", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 30 } }
+      );
+      break;
+    case "pricingCard":
+      steps.push(
+        { tool: "create_component", params: { name: "Pricing Card", width: 340, height: 440, cornerRadius: 16, fillR: 0.98, fillG: 0.98, fillB: 0.98 } },
+        { tool: "create_text", params: { text: "Pro Plan", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 24 } },
+        { tool: "create_text", params: { text: "$49/mo", fontFamily: "Inter", fontStyle: "Bold", fontSize: 40 } }
+      );
+      break;
+    case "sidebarShell":
+      steps.push(
+        {
+          tool: "create_frame",
+          params: {
+            name: "Sidebar Shell",
+            width: 1366,
+            height: 900,
+            layoutMode: "HORIZONTAL",
+            itemSpacing: 0,
+            paddingTop: 0,
+            paddingRight: 0,
+            paddingBottom: 0,
+            paddingLeft: 0,
+          },
+        },
+        { tool: "create_frame", params: { name: "Sidebar", width: 264, height: 900, layoutMode: "VERTICAL", itemSpacing: 10, paddingTop: 20, paddingRight: 16, paddingBottom: 20, paddingLeft: 16 } },
+        { tool: "create_frame", params: { name: "Content", width: 1102, height: 900, layoutMode: "VERTICAL", itemSpacing: 16, paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24 } }
+      );
+      break;
+    case "modal":
+      steps.push(
+        { tool: "create_component", params: { name: "Modal", width: 560, height: 360, cornerRadius: 16, fillR: 1, fillG: 1, fillB: 1, layoutMode: "VERTICAL", itemSpacing: 14, paddingTop: 24, paddingRight: 24, paddingBottom: 24, paddingLeft: 24 } },
+        { tool: "create_text", params: { text: "Modal title", fontFamily: "Inter", fontStyle: "Semibold", fontSize: 28 } },
+        { tool: "create_text", params: { text: "Supporting details and action summary.", fontFamily: "Inter", fontStyle: "Regular", fontSize: 16 } }
+      );
+      break;
+    default:
+      setLibraryMeta(`Unknown template: ${template}`, true);
+      return;
+  }
+
+  try {
+    for (const step of steps) {
+      await callPluginCommand(step.tool, step.params, 22000);
+    }
+    setLibraryMeta(`Inserted ${template} template.`);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    setLibraryMeta(`Template failed: ${message}`, true);
   }
 }
 
@@ -507,23 +729,100 @@ chatInput.addEventListener("keydown", (e) => {
 
 clearChatBtn.addEventListener("click", () => {
   clearChat();
-  setMeta("Chat cleared.");
 });
+
+saveResearchBtn.addEventListener("click", () => {
+  saveResearchState();
+});
+
+useResearchNowBtn.addEventListener("click", () => {
+  activatePage("chatPage");
+  chatInput.focus();
+  setChatMeta("Research context is active for next generation.");
+});
+
+for (const btn of navBtns) {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.pageTarget;
+    if (!target) return;
+    activatePage(target);
+  });
+}
+
+for (const btn of libraryTabs) {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.libraryTarget;
+    if (!target) return;
+    activateLibraryPanel(target);
+  });
+}
+
+for (const btn of typeTabs) {
+  btn.addEventListener("click", () => {
+    const target = btn.dataset.typeTarget;
+    if (!target) return;
+    activateTypeGroup(target);
+  });
+}
+
+for (const btn of templateBtns) {
+  btn.addEventListener("click", () => {
+    const template = btn.dataset.componentTemplate;
+    if (!template) return;
+    void runTemplate(template);
+  });
+}
+
+for (const btn of textStyleBtns) {
+  btn.addEventListener("click", () => {
+    const raw = btn.dataset.textStyle;
+    if (!raw) return;
+    void createTextStyle(raw);
+  });
+}
 
 themeToggleBtn.addEventListener("click", () => {
   const current = document.body.classList.contains("theme-light") ? "light" : "dark";
   applyTheme(current === "light" ? "dark" : "light");
 });
 
+sizeDownBtn.addEventListener("click", () => {
+  void applyUiScale(uiScale - UI_SCALE_STEP);
+});
+
+sizeUpBtn.addEventListener("click", () => {
+  void applyUiScale(uiScale + UI_SCALE_STEP);
+});
+
 apiKeyInput.addEventListener("change", () => {
   localStorage.setItem(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
+});
+
+researchContextInput.addEventListener("change", () => {
+  localStorage.setItem(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
+});
+
+designProfileInput.addEventListener("change", () => {
+  localStorage.setItem(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
 });
 
 const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
 applyTheme(storedTheme === "light" ? "light" : "dark");
 
+const storedScale = Number(localStorage.getItem(UI_SCALE_STORAGE_KEY));
+uiScale = Number.isFinite(storedScale) ? normalizeScale(storedScale) : MIN_UI_SCALE;
+setUiScaleLabel(uiScale);
+void applyUiScale(uiScale);
+
 const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
 if (storedApiKey) apiKeyInput.value = storedApiKey;
 
+const storedResearch = localStorage.getItem(RESEARCH_CONTEXT_STORAGE_KEY);
+if (storedResearch) researchContextInput.value = storedResearch;
+
+const storedProfile = localStorage.getItem(DESIGN_PROFILE_STORAGE_KEY);
+designProfileInput.value = storedProfile && storedProfile.trim() ? storedProfile : defaultDesignProfile;
+
 updateProviderUI();
-addChatBubble("assistant", "CursorCanvas ready. Connect, then ask me to design something in Figma.");
+setAssistantOutput("CursorCanvas ready. Connect, then chat to generate designs directly on canvas.");
+setLibraryMeta("Templates and text styles insert directly in Figma.");

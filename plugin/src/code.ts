@@ -420,6 +420,15 @@ async function handleCommand(
       return { ok: true, url };
     }
 
+    case "resize_ui": {
+      const requestedWidth = numberParam(params, "width") ?? 460;
+      const requestedHeight = numberParam(params, "height") ?? 820;
+      const width = Math.round(Math.max(320, Math.min(920, requestedWidth)));
+      const height = Math.round(Math.max(520, Math.min(1640, requestedHeight)));
+      figma.ui.resize(width, height);
+      return { width, height };
+    }
+
     default:
       throw new Error(`Unknown tool: ${tool}`);
   }

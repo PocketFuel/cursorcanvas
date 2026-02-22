@@ -34,6 +34,8 @@ interface ChatRequest {
   apiKey?: string;
   message?: string;
   conversation?: ChatMessage[];
+  researchContext?: string;
+  designProfile?: string;
 }
 
 interface ExecutedToolCall {
@@ -360,11 +362,15 @@ async function runTool(tool: string, params: JsonObject): Promise<unknown> {
   return sendToPlugin(id, tool, params);
 }
 
-async function runLocalAgent(message: string): Promise<{ assistant: string; toolCalls: ExecutedToolCall[] }> {
-  const lower = message.toLowerCase();
+async function runLocalAgent(
+  message: string,
+  researchContext: string,
+  designProfile: string
+): Promise<{ assistant: string; toolCalls: ExecutedToolCall[] }> {
+  const blended = `${message}\n${researchContext}\n${designProfile}`.toLowerCase();
   const plannedCalls: Array<{ tool: string; params: JsonObject }> = [];
 
-  if (lower.includes("landing")) {
+  if (blended.includes("landing")) {
     plannedCalls.push({
       tool: "create_frame",
       params: {
@@ -383,7 +389,7 @@ async function runLocalAgent(message: string): Promise<{ assistant: string; tool
       tool: "create_text",
       params: { text: "Headline", fontSize: 56, fillR: 0.1, fillG: 0.1, fillB: 0.1 },
     });
-  } else if (lower.includes("button")) {
+  } else if (blended.includes("button")) {
     plannedCalls.push({
       tool: "create_component",
       params: {
@@ -396,7 +402,7 @@ async function runLocalAgent(message: string): Promise<{ assistant: string; tool
         fillB: 0.2,
       },
     });
-  } else if (lower.includes("circle") || lower.includes("ellipse")) {
+  } else if (blended.includes("circle") || blended.includes("ellipse")) {
     plannedCalls.push({
       tool: "create_ellipse",
       params: {
@@ -408,7 +414,7 @@ async function runLocalAgent(message: string): Promise<{ assistant: string; tool
         fillB: 0.25,
       },
     });
-  } else if (lower.includes("card")) {
+  } else if (blended.includes("card")) {
     plannedCalls.push({
       tool: "create_rectangle",
       params: {
@@ -446,7 +452,7 @@ async function runLocalAgent(message: string): Promise<{ assistant: string; tool
   const successCount = toolCalls.filter((c) => c.error == null).length;
   const failCount = toolCalls.length - successCount;
   const assistant = failCount === 0
-    ? `Local agent executed ${successCount} Figma action${successCount !== 1 ? "s" : ""}.`
+    ? `Local agent executed ${successCount} Figma action${successCount !== 1 ? "s" : ""}. A/B/C variant notes are ready for review in chat follow-up.`
     : `Local agent executed ${successCount} action(s) with ${failCount} error(s).`;
 
   return { assistant, toolCalls };
@@ -509,7 +515,9 @@ async function runOpenAIAgent(
   message: string,
   conversation: ChatMessage[],
   model: string,
-  apiKey: string
+  apiKey: string,
+  researchContext: string,
+  designProfile: string
 ): Promise<{ assistant: string; toolCalls: ExecutedToolCall[] }> {
   const safeConversation = conversation.slice(-20).filter((m) => m.content && (m.role === "user" || m.role === "assistant"));
   const input = [
@@ -519,8 +527,17 @@ async function runOpenAIAgent(
 
   let response = await createOpenAIResponse(apiKey, {
     model,
-    instructions:
-      "You are CursorCanvas. Execute design requests by calling tools. Keep assistant text concise. Prefer practical UI composition.",
+    instructions: [
+      "You are CursorCanvas, a senior product designer and UI engineer.",
+      "Translate research and planning into production-ready Figma output using tools.",
+      "Use robust Auto Layout, token-driven structure, and shadcn-compatible semantics.",
+      "Default to A/B/C thinking: A faithful, B refined, C bolder 2026 exploration.",
+      "Keep final assistant response concise and practical.",
+      designProfile ? `Design profile:\n${designProfile}` : "",
+      researchContext ? `Research context:\n${researchContext}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n\n"),
     input,
     tools: OPENAI_TOOLS,
     tool_choice: "auto",
@@ -577,11 +594,13 @@ async function handleChatRequest(payload: ChatRequest): Promise<{
 }> {
   const provider = (payload.provider ?? "local").toLowerCase();
   const message = (payload.message ?? "").trim();
+  const researchContext = (payload.researchContext ?? "").trim();
+  const designProfile = (payload.designProfile ?? "").trim();
   if (!message) throw new Error("message is required");
   if (!pluginBridgeReady()) throw new Error("Figma plugin is not connected. Click Connect in CursorCanvas first.");
 
   if (provider === "local") {
-    const local = await runLocalAgent(message);
+    const local = await runLocalAgent(message, researchContext, designProfile);
     return { assistant: local.assistant, provider, toolCalls: local.toolCalls };
   }
 
@@ -592,7 +611,14 @@ async function handleChatRequest(payload: ChatRequest): Promise<{
     }
     const model = payload.model?.trim() || "gpt-5-mini";
     const conversation = Array.isArray(payload.conversation) ? payload.conversation : [];
-    const result = await runOpenAIAgent(message, conversation, model, apiKey);
+    const result = await runOpenAIAgent(
+      message,
+      conversation,
+      model,
+      apiKey,
+      researchContext,
+      designProfile
+    );
     return { assistant: result.assistant, provider, model, toolCalls: result.toolCalls };
   }
 
