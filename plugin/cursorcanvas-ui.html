@@ -421,6 +421,39 @@
       margin: 0;
     }
 
+    .profile-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid rgba(130, 130, 136, 0.34);
+      border-radius: 999px;
+      padding: 5px 8px;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--muted);
+      width: fit-content;
+    }
+
+    .profile-pill strong {
+      color: var(--text);
+      font-weight: 700;
+      text-transform: none;
+      letter-spacing: 0;
+      font-size: 11px;
+    }
+
+    .profile-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .profile-actions button {
+      flex: 1;
+      min-width: 120px;
+    }
+
     .target-row {
       display: flex;
       align-items: center;
@@ -1122,6 +1155,41 @@
 
     <main class="main card">
       <section id="chatPage" class="page active">
+        <div class="section">
+          <h2 class="title">Profile</h2>
+          <div id="profilePill" class="profile-pill">Active: <strong>Guest</strong></div>
+          <div class="row">
+            <div class="grow">
+              <label for="profileUsername">Username</label>
+              <input id="profileUsername" type="text" placeholder="designer01">
+            </div>
+            <div class="grow">
+              <label for="profilePasscode">Passcode</label>
+              <input id="profilePasscode" type="password" placeholder="local passcode">
+            </div>
+          </div>
+          <div class="profile-actions">
+            <button id="profileLogin" type="button">Login / Create</button>
+            <button id="profileLogout" class="ghost" type="button">Logout</button>
+          </div>
+          <label for="profileSelect">Saved Profiles</label>
+          <div class="row">
+            <select id="profileSelect" class="grow">
+              <option value="">No saved profiles</option>
+            </select>
+            <button id="profileUseSelected" class="ghost" type="button">Use Selected</button>
+          </div>
+          <label for="chatSnapshotSelect">Saved Chats</label>
+          <div class="row">
+            <select id="chatSnapshotSelect" class="grow">
+              <option value="">No saved chats</option>
+            </select>
+            <button id="saveChatSnapshot" class="ghost" type="button">Save Chat</button>
+            <button id="loadChatSnapshot" class="ghost" type="button">Load Chat</button>
+          </div>
+          <p id="profileMeta" class="note">Guest mode active. Login to save style preferences and chats per profile.</p>
+        </div>
+
         <div class="section">
           <h2 class="title">Connection</h2>
           <label for="url">MCP URL</label>

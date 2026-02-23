@@ -12,6 +12,17 @@ const themeToggleBtn = byId<HTMLButtonElement>("themeToggle");
 const sizeDownBtn = byId<HTMLButtonElement>("sizeDown");
 const sizeUpBtn = byId<HTMLButtonElement>("sizeUp");
 const sizeLabelEl = byId<HTMLDivElement>("sizeLabel");
+const profilePillEl = byId<HTMLDivElement>("profilePill");
+const profileMetaEl = byId<HTMLParagraphElement>("profileMeta");
+const profileUsernameInput = byId<HTMLInputElement>("profileUsername");
+const profilePasscodeInput = byId<HTMLInputElement>("profilePasscode");
+const profileLoginBtn = byId<HTMLButtonElement>("profileLogin");
+const profileLogoutBtn = byId<HTMLButtonElement>("profileLogout");
+const profileSelectEl = byId<HTMLSelectElement>("profileSelect");
+const profileUseSelectedBtn = byId<HTMLButtonElement>("profileUseSelected");
+const saveChatSnapshotBtn = byId<HTMLButtonElement>("saveChatSnapshot");
+const loadChatSnapshotBtn = byId<HTMLButtonElement>("loadChatSnapshot");
+const chatSnapshotSelectEl = byId<HTMLSelectElement>("chatSnapshotSelect");
 
 const providerSelect = byId<HTMLSelectElement>("providerSelect");
 const modelInput = byId<HTMLInputElement>("modelInput");
@@ -76,6 +87,22 @@ interface ChatMessage {
   content: string;
 }
 
+interface ChatSnapshot {
+  id: string;
+  label: string;
+  createdAt: string;
+  messages: ChatMessage[];
+}
+
+interface StoredProfileAccount {
+  id: string;
+  username: string;
+  passcodeHash: string;
+  data: Record<string, string>;
+  createdAt: string;
+  updatedAt: string;
+}
+
 interface ChatResponse {
   assistant: string;
   provider: string;
@@ -111,11 +138,17 @@ const LOCAL_HTTP_MIN = 3056;
 const LOCAL_HTTP_MAX = 3080;
 const PORT_SCAN_TIMEOUT_MS = 420;
 
+const PROFILES_STORAGE_KEY = "cursorcanvas_profiles_v1";
+const ACTIVE_PROFILE_STORAGE_KEY = "cursorcanvas_active_profile_v1";
 const THEME_STORAGE_KEY = "cursorcanvas_theme";
 const UI_SCALE_STORAGE_KEY = "cursorcanvas_ui_scale";
+const PROVIDER_STORAGE_KEY = "cursorcanvas_provider";
+const MODEL_STORAGE_KEY = "cursorcanvas_model";
 const API_KEY_STORAGE_KEY = "cursorcanvas_openai_key";
 const RESEARCH_CONTEXT_STORAGE_KEY = "cursorcanvas_research_context";
 const DESIGN_PROFILE_STORAGE_KEY = "cursorcanvas_design_profile";
+const CHAT_HISTORY_STORAGE_KEY = "cursorcanvas_chat_history";
+const CHAT_SNAPSHOTS_STORAGE_KEY = "cursorcanvas_chat_snapshots";
 const QUESTIONNAIRE_PROJECT_KEY = "cursorcanvas_questionnaire_project";
 const QUESTIONNAIRE_STYLE_KEY = "cursorcanvas_questionnaire_style";
 const QUESTIONNAIRE_INFLUENCES_KEY = "cursorcanvas_questionnaire_influences";
@@ -133,10 +166,12 @@ const UI_SCALE_STEP = 0.25;
 let uiScale = MIN_UI_SCALE;
 let mainFrameId = "";
 let mainFrameName = "";
+let activeProfileId = "";
 let selectedProjectType = "website";
 let selectedStyleId = "minimal-editorial";
 const selectedInfluences = new Set<string>(["Swiss typography", "Apple HIG clarity"]);
 const selectedMoods = new Set<string>(["Confident", "Premium", "Clean"]);
+let profilesStore: Record<string, StoredProfileAccount> = {};
 
 const defaultDesignProfile = [
   "You are a senior product designer and UI engineer specialized in translating references into production-ready Figma output using 2025-2026 patterns.",
@@ -418,6 +453,429 @@ function setLibraryMeta(text: string, isError = false) {
   libraryMetaEl.style.color = isError ? "#d88d8d" : "";
 }
 
+function setProfileMeta(text: string, isError = false) {
+  profileMetaEl.textContent = text;
+  profileMetaEl.style.color = isError ? "#d88d8d" : "";
+}
+
+function normalizeProfileId(username: string): string {
+  return username
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "");
+}
+
+function hashPasscode(passcode: string): string {
+  let hash = 5381;
+  for (let i = 0; i < passcode.length; i += 1) {
+    hash = (hash * 33) ^ passcode.charCodeAt(i);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function loadProfilesStore() {
+  const raw = localStorage.getItem(PROFILES_STORAGE_KEY);
+  if (!raw) {
+    profilesStore = {};
+    return;
+  }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, StoredProfileAccount>;
+    if (!parsed || typeof parsed !== "object") {
+      profilesStore = {};
+      return;
+    }
+    const next: Record<string, StoredProfileAccount> = {};
+    for (const [id, account] of Object.entries(parsed)) {
+      if (!account || typeof account !== "object") continue;
+      if (typeof account.id !== "string" || typeof account.username !== "string") continue;
+      if (typeof account.passcodeHash !== "string" || !account.data || typeof account.data !== "object") continue;
+      next[id] = {
+        id: account.id,
+        username: account.username,
+        passcodeHash: account.passcodeHash,
+        data: account.data,
+        createdAt: typeof account.createdAt === "string" ? account.createdAt : new Date().toISOString(),
+        updatedAt: typeof account.updatedAt === "string" ? account.updatedAt : new Date().toISOString(),
+      };
+    }
+    profilesStore = next;
+  } catch {
+    profilesStore = {};
+  }
+}
+
+function persistProfilesStore() {
+  localStorage.setItem(PROFILES_STORAGE_KEY, JSON.stringify(profilesStore));
+}
+
+function getActiveProfileAccount(): StoredProfileAccount | null {
+  if (!activeProfileId) return null;
+  return profilesStore[activeProfileId] ?? null;
+}
+
+function getStoredValue(key: string): string | null {
+  const account = getActiveProfileAccount();
+  if (account) {
+    const scopedValue = account.data[key];
+    if (typeof scopedValue === "string") return scopedValue;
+  }
+  return localStorage.getItem(key);
+}
+
+function setStoredValue(key: string, value: string) {
+  const account = getActiveProfileAccount();
+  if (account) {
+    account.data[key] = value;
+    account.updatedAt = new Date().toISOString();
+    persistProfilesStore();
+    return;
+  }
+  localStorage.setItem(key, value);
+}
+
+function removeStoredValue(key: string) {
+  const account = getActiveProfileAccount();
+  if (account) {
+    delete account.data[key];
+    account.updatedAt = new Date().toISOString();
+    persistProfilesStore();
+    return;
+  }
+  localStorage.removeItem(key);
+}
+
+function updateProfilePill() {
+  const account = getActiveProfileAccount();
+  const name = account ? account.username : "Guest";
+  profilePillEl.innerHTML = `Active: <strong>${escapeHtml(name)}</strong>`;
+}
+
+function refreshProfileSelect() {
+  const accounts = Object.values(profilesStore).sort((a, b) => a.username.localeCompare(b.username));
+  profileSelectEl.innerHTML = "";
+
+  if (accounts.length === 0) {
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = "No saved profiles";
+    profileSelectEl.appendChild(emptyOpt);
+    profileUseSelectedBtn.disabled = true;
+    return;
+  }
+
+  const promptOpt = document.createElement("option");
+  promptOpt.value = "";
+  promptOpt.textContent = "Select profile";
+  profileSelectEl.appendChild(promptOpt);
+
+  for (const account of accounts) {
+    const opt = document.createElement("option");
+    opt.value = account.id;
+    opt.textContent = account.username;
+    if (account.id === activeProfileId) opt.selected = true;
+    profileSelectEl.appendChild(opt);
+  }
+  profileUseSelectedBtn.disabled = false;
+}
+
+function readChatHistoryFromStorage() {
+  chatHistory.length = 0;
+  const raw = getStoredValue(CHAT_HISTORY_STORAGE_KEY);
+  if (!raw) return;
+  try {
+    const parsed = JSON.parse(raw) as ChatMessage[];
+    for (const item of parsed) {
+      if (!item || (item.role !== "user" && item.role !== "assistant") || typeof item.content !== "string") continue;
+      chatHistory.push({ role: item.role, content: item.content });
+    }
+  } catch {
+    // ignore corrupted persisted chat history
+  }
+}
+
+function persistChatHistory() {
+  setStoredValue(CHAT_HISTORY_STORAGE_KEY, JSON.stringify(chatHistory.slice(-40)));
+}
+
+function readChatSnapshotsFromStorage(): ChatSnapshot[] {
+  const raw = getStoredValue(CHAT_SNAPSHOTS_STORAGE_KEY);
+  if (!raw) return [];
+  try {
+    const parsed = JSON.parse(raw) as ChatSnapshot[];
+    const snapshots: ChatSnapshot[] = [];
+    for (const item of parsed) {
+      if (!item || typeof item !== "object") continue;
+      if (typeof item.id !== "string" || typeof item.label !== "string" || typeof item.createdAt !== "string") continue;
+      if (!Array.isArray(item.messages)) continue;
+      const messages: ChatMessage[] = [];
+      for (const msg of item.messages) {
+        if (!msg || (msg.role !== "user" && msg.role !== "assistant") || typeof msg.content !== "string") continue;
+        messages.push({ role: msg.role, content: msg.content });
+      }
+      snapshots.push({ id: item.id, label: item.label, createdAt: item.createdAt, messages });
+    }
+    return snapshots.slice(0, 30);
+  } catch {
+    return [];
+  }
+}
+
+function writeChatSnapshotsToStorage(snapshots: ChatSnapshot[]) {
+  setStoredValue(CHAT_SNAPSHOTS_STORAGE_KEY, JSON.stringify(snapshots.slice(0, 30)));
+}
+
+function refreshChatSnapshotSelect(selectedId = "") {
+  const snapshots = readChatSnapshotsFromStorage();
+  chatSnapshotSelectEl.innerHTML = "";
+  if (snapshots.length === 0) {
+    const emptyOpt = document.createElement("option");
+    emptyOpt.value = "";
+    emptyOpt.textContent = activeProfileId ? "No saved chats" : "Login to save chats";
+    chatSnapshotSelectEl.appendChild(emptyOpt);
+    loadChatSnapshotBtn.disabled = true;
+    return;
+  }
+
+  for (const snapshot of snapshots) {
+    const opt = document.createElement("option");
+    opt.value = snapshot.id;
+    const dateLabel = new Date(snapshot.createdAt).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+    opt.textContent = `${dateLabel} - ${snapshot.label}`;
+    if (selectedId && snapshot.id === selectedId) opt.selected = true;
+    chatSnapshotSelectEl.appendChild(opt);
+  }
+  loadChatSnapshotBtn.disabled = false;
+}
+
+function persistCurrentWorkspaceState() {
+  const theme = document.body.classList.contains("theme-light") ? "light" : "dark";
+  setStoredValue(THEME_STORAGE_KEY, theme);
+  setStoredValue(UI_SCALE_STORAGE_KEY, String(uiScale));
+  setStoredValue(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
+  setStoredValue(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
+  setStoredValue(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
+  setStoredValue(QUESTIONNAIRE_PROJECT_KEY, selectedProjectType);
+  setStoredValue(QUESTIONNAIRE_STYLE_KEY, selectedStyleId);
+  setStoredValue(QUESTIONNAIRE_INFLUENCES_KEY, JSON.stringify(Array.from(selectedInfluences)));
+  setStoredValue(QUESTIONNAIRE_MOODS_KEY, JSON.stringify(Array.from(selectedMoods)));
+  setStoredValue(QUESTIONNAIRE_AUDIENCE_KEY, audienceSelect.value);
+  setStoredValue(QUESTIONNAIRE_COMPLEXITY_KEY, complexitySelect.value);
+  setStoredValue(MAIN_FRAME_ID_STORAGE_KEY, mainFrameId);
+  setStoredValue(MAIN_FRAME_NAME_STORAGE_KEY, mainFrameName);
+  setStoredValue(PROVIDER_STORAGE_KEY, providerSelect.value);
+  setStoredValue(MODEL_STORAGE_KEY, modelInput.value.trim());
+  persistChatHistory();
+}
+
+function applyStoredWorkspaceState() {
+  const storedTheme = getStoredValue(THEME_STORAGE_KEY);
+  applyTheme(storedTheme === "light" ? "light" : "dark");
+
+  const storedScale = Number(getStoredValue(UI_SCALE_STORAGE_KEY));
+  uiScale = Number.isFinite(storedScale) ? normalizeScale(storedScale) : MIN_UI_SCALE;
+  setUiScaleLabel(uiScale);
+  void applyUiScale(uiScale);
+
+  const storedApiKey = getStoredValue(API_KEY_STORAGE_KEY);
+  apiKeyInput.value = storedApiKey ?? "";
+
+  const storedProvider = getStoredValue(PROVIDER_STORAGE_KEY);
+  if (storedProvider && Array.from(providerSelect.options).some((opt) => opt.value === storedProvider)) {
+    providerSelect.value = storedProvider;
+  }
+  const storedModel = getStoredValue(MODEL_STORAGE_KEY);
+  if (storedModel) modelInput.value = storedModel;
+
+  applyQuestionnaireDefaults();
+
+  const storedResearch = getStoredValue(RESEARCH_CONTEXT_STORAGE_KEY);
+  researchContextInput.value = storedResearch ?? "";
+
+  const storedProfile = getStoredValue(DESIGN_PROFILE_STORAGE_KEY);
+  designProfileInput.value = storedProfile && storedProfile.trim() ? storedProfile : defaultDesignProfile;
+  researchFieldsEl.classList.add("hidden");
+
+  const storedMainFrameId = getStoredValue(MAIN_FRAME_ID_STORAGE_KEY);
+  const storedMainFrameName = getStoredValue(MAIN_FRAME_NAME_STORAGE_KEY);
+  if (storedMainFrameId && storedMainFrameName) {
+    mainFrameId = storedMainFrameId;
+    mainFrameName = storedMainFrameName;
+  } else {
+    mainFrameId = "";
+    mainFrameName = "";
+  }
+  updateMainFrameLabel();
+
+  readChatHistoryFromStorage();
+  const lastAssistant = [...chatHistory].reverse().find((item) => item.role === "assistant");
+  setAssistantOutput(lastAssistant?.content ?? "CursorCanvas ready. Connect, then chat to generate designs directly on canvas.");
+  refreshChatSnapshotSelect();
+  updateProviderUI();
+}
+
+function setActiveProfile(profileId: string) {
+  activeProfileId = profileId;
+  if (profileId) {
+    localStorage.setItem(ACTIVE_PROFILE_STORAGE_KEY, profileId);
+  } else {
+    localStorage.removeItem(ACTIVE_PROFILE_STORAGE_KEY);
+  }
+  refreshProfileSelect();
+  updateProfilePill();
+  profileLogoutBtn.disabled = !activeProfileId;
+  saveChatSnapshotBtn.disabled = !activeProfileId;
+  loadChatSnapshotBtn.disabled = !activeProfileId;
+}
+
+function loginOrCreateProfile() {
+  const rawUsername = profileUsernameInput.value.trim();
+  const passcode = profilePasscodeInput.value.trim();
+  if (rawUsername.length < 2) {
+    setProfileMeta("Use at least 2 characters for username.", true);
+    return;
+  }
+  if (passcode.length < 4) {
+    setProfileMeta("Use at least 4 characters for passcode.", true);
+    return;
+  }
+
+  const profileId = normalizeProfileId(rawUsername);
+  if (!profileId) {
+    setProfileMeta("Username contains unsupported characters.", true);
+    return;
+  }
+
+  persistCurrentWorkspaceState();
+
+  const now = new Date().toISOString();
+  const passcodeHash = hashPasscode(passcode);
+  let created = false;
+  let account = profilesStore[profileId];
+
+  if (!account) {
+    account = {
+      id: profileId,
+      username: rawUsername,
+      passcodeHash,
+      data: {},
+      createdAt: now,
+      updatedAt: now,
+    };
+    profilesStore[profileId] = account;
+    created = true;
+  } else if (account.passcodeHash !== passcodeHash) {
+    setProfileMeta("Incorrect passcode for that profile.", true);
+    return;
+  } else {
+    account.username = rawUsername;
+    account.updatedAt = now;
+  }
+
+  persistProfilesStore();
+  setActiveProfile(profileId);
+
+  if (created) {
+    persistCurrentWorkspaceState();
+    setProfileMeta(`Profile ${rawUsername} created. Preferences and chats are now profile-scoped.`);
+  } else {
+    applyStoredWorkspaceState();
+    setProfileMeta(`Signed in as ${rawUsername}. Loaded saved preferences and chat history.`);
+  }
+
+  profilePasscodeInput.value = "";
+  refreshChatSnapshotSelect();
+}
+
+function logoutProfile() {
+  if (!activeProfileId) {
+    setProfileMeta("Already in guest mode.");
+    return;
+  }
+  const account = getActiveProfileAccount();
+  const previousName = account?.username ?? "Profile";
+  persistCurrentWorkspaceState();
+  setActiveProfile("");
+  persistCurrentWorkspaceState();
+  refreshChatSnapshotSelect();
+  setProfileMeta(`${previousName} signed out. Guest mode active.`, false);
+}
+
+function useSelectedProfile() {
+  const selected = profileSelectEl.value;
+  if (!selected || !profilesStore[selected]) {
+    setProfileMeta("Select a saved profile first.", true);
+    return;
+  }
+  profileUsernameInput.value = profilesStore[selected].username;
+  profilePasscodeInput.focus();
+  setProfileMeta(`Enter passcode for ${profilesStore[selected].username} and click Login.`);
+}
+
+function saveChatSnapshot() {
+  if (!activeProfileId) {
+    setProfileMeta("Login to save chat snapshots.", true);
+    return;
+  }
+  if (chatHistory.length === 0) {
+    setProfileMeta("No chat to save yet.", true);
+    return;
+  }
+
+  const userMessage = [...chatHistory].reverse().find((item) => item.role === "user")?.content ?? "Design chat";
+  const label = userMessage.slice(0, 48).trim() || "Design chat";
+  const snapshots = readChatSnapshotsFromStorage();
+  const snapshot: ChatSnapshot = {
+    id: makeRequestId("chat"),
+    label,
+    createdAt: new Date().toISOString(),
+    messages: chatHistory.slice(-40),
+  };
+  const next = [snapshot, ...snapshots].slice(0, 30);
+  writeChatSnapshotsToStorage(next);
+  refreshChatSnapshotSelect(snapshot.id);
+  setProfileMeta(`Saved chat snapshot: "${label}".`);
+}
+
+function loadChatSnapshot() {
+  if (!activeProfileId) {
+    setProfileMeta("Login to load saved chats.", true);
+    return;
+  }
+  const snapshotId = chatSnapshotSelectEl.value;
+  if (!snapshotId) {
+    setProfileMeta("Select a saved chat snapshot first.", true);
+    return;
+  }
+
+  const snapshot = readChatSnapshotsFromStorage().find((item) => item.id === snapshotId);
+  if (!snapshot) {
+    setProfileMeta("Selected snapshot was not found.", true);
+    refreshChatSnapshotSelect();
+    return;
+  }
+
+  chatHistory.length = 0;
+  for (const msg of snapshot.messages) {
+    chatHistory.push({ role: msg.role, content: msg.content });
+  }
+  persistChatHistory();
+  const lastAssistant = [...chatHistory].reverse().find((msg) => msg.role === "assistant");
+  setAssistantOutput(lastAssistant?.content ?? "Chat snapshot loaded.");
+  setChatMeta(`Loaded saved chat from ${new Date(snapshot.createdAt).toLocaleString()}.`);
+  setProfileMeta(`Loaded chat snapshot: "${snapshot.label}".`);
+}
+
 function updateMainFrameLabel() {
   targetFrameLabelEl.textContent = mainFrameName || "None";
 }
@@ -425,16 +883,16 @@ function updateMainFrameLabel() {
 function setMainFrameTarget(id: string, name: string) {
   mainFrameId = id;
   mainFrameName = name;
-  localStorage.setItem(MAIN_FRAME_ID_STORAGE_KEY, id);
-  localStorage.setItem(MAIN_FRAME_NAME_STORAGE_KEY, name);
+  setStoredValue(MAIN_FRAME_ID_STORAGE_KEY, id);
+  setStoredValue(MAIN_FRAME_NAME_STORAGE_KEY, name);
   updateMainFrameLabel();
 }
 
 function clearMainFrameTarget() {
   mainFrameId = "";
   mainFrameName = "";
-  localStorage.removeItem(MAIN_FRAME_ID_STORAGE_KEY);
-  localStorage.removeItem(MAIN_FRAME_NAME_STORAGE_KEY);
+  removeStoredValue(MAIN_FRAME_ID_STORAGE_KEY);
+  removeStoredValue(MAIN_FRAME_NAME_STORAGE_KEY);
   updateMainFrameLabel();
 }
 
@@ -564,7 +1022,7 @@ function applyTheme(theme: "dark" | "light") {
   document.body.classList.remove("theme-dark", "theme-light");
   document.body.classList.add(theme === "light" ? "theme-light" : "theme-dark");
   themeToggleBtn.textContent = theme === "light" ? "Dark Mode" : "Light Mode";
-  localStorage.setItem(THEME_STORAGE_KEY, theme);
+  setStoredValue(THEME_STORAGE_KEY, theme);
   applyStyleThemeFromSelections();
 }
 
@@ -587,7 +1045,7 @@ async function applyUiScale(scale: number) {
     await callPluginCommand("resize_ui", { width, height }, 10000);
     uiScale = normalized;
     setUiScaleLabel(normalized);
-    localStorage.setItem(UI_SCALE_STORAGE_KEY, String(normalized));
+    setStoredValue(UI_SCALE_STORAGE_KEY, String(normalized));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     setError(`Resize failed: ${message}`);
@@ -898,6 +1356,40 @@ function getChatBaseUrl(): string {
   return wsUrlToHttpPollUrl(urlInput.value.trim() || DEFAULT_WS_URL);
 }
 
+async function postChatWithAutoRecovery(body: unknown): Promise<Response> {
+  let baseUrl = getChatBaseUrl();
+  let response = await fetch(baseUrl + "/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (response.status !== 404) {
+    return response;
+  }
+
+  const fallbackWsUrl = await discoverLocalWsUrl(urlInput.value.trim() || DEFAULT_WS_URL);
+  if (!fallbackWsUrl) {
+    return response;
+  }
+
+  const fallbackBaseUrl = wsUrlToHttpPollUrl(fallbackWsUrl);
+  if (fallbackBaseUrl === baseUrl) {
+    return response;
+  }
+
+  urlInput.value = fallbackWsUrl;
+  httpBaseUrl = fallbackBaseUrl;
+  setChatMeta(`Detected alternate local MCP server at ${fallbackWsUrl}. Retrying chat...`);
+  baseUrl = fallbackBaseUrl;
+  response = await fetch(baseUrl + "/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  return response;
+}
+
 function getResearchPayload(): { researchContext: string; designProfile: string } {
   return {
     researchContext: researchContextInput.value.trim(),
@@ -906,8 +1398,8 @@ function getResearchPayload(): { researchContext: string; designProfile: string 
 }
 
 function saveResearchState() {
-  localStorage.setItem(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
-  localStorage.setItem(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
+  setStoredValue(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
+  setStoredValue(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
   setResearchMeta("Research brief saved.");
 }
 
@@ -957,22 +1449,34 @@ function randomSubset<T>(items: T[], min: number, max: number): T[] {
 }
 
 function saveQuestionnaireState() {
-  localStorage.setItem(QUESTIONNAIRE_PROJECT_KEY, selectedProjectType);
-  localStorage.setItem(QUESTIONNAIRE_STYLE_KEY, selectedStyleId);
-  localStorage.setItem(QUESTIONNAIRE_INFLUENCES_KEY, JSON.stringify(Array.from(selectedInfluences)));
-  localStorage.setItem(QUESTIONNAIRE_MOODS_KEY, JSON.stringify(Array.from(selectedMoods)));
-  localStorage.setItem(QUESTIONNAIRE_AUDIENCE_KEY, audienceSelect.value);
-  localStorage.setItem(QUESTIONNAIRE_COMPLEXITY_KEY, complexitySelect.value);
+  setStoredValue(QUESTIONNAIRE_PROJECT_KEY, selectedProjectType);
+  setStoredValue(QUESTIONNAIRE_STYLE_KEY, selectedStyleId);
+  setStoredValue(QUESTIONNAIRE_INFLUENCES_KEY, JSON.stringify(Array.from(selectedInfluences)));
+  setStoredValue(QUESTIONNAIRE_MOODS_KEY, JSON.stringify(Array.from(selectedMoods)));
+  setStoredValue(QUESTIONNAIRE_AUDIENCE_KEY, audienceSelect.value);
+  setStoredValue(QUESTIONNAIRE_COMPLEXITY_KEY, complexitySelect.value);
 }
 
 function restoreQuestionnaireState() {
-  const project = localStorage.getItem(QUESTIONNAIRE_PROJECT_KEY);
+  selectedProjectType = "website";
+  selectedStyleId = "minimal-editorial";
+  selectedInfluences.clear();
+  selectedInfluences.add("Swiss typography");
+  selectedInfluences.add("Apple HIG clarity");
+  selectedMoods.clear();
+  selectedMoods.add("Confident");
+  selectedMoods.add("Premium");
+  selectedMoods.add("Clean");
+  audienceSelect.value = "general consumers";
+  complexitySelect.value = "focused and minimal";
+
+  const project = getStoredValue(QUESTIONNAIRE_PROJECT_KEY);
   if (project && PROJECT_LABELS[project]) selectedProjectType = project;
 
-  const style = localStorage.getItem(QUESTIONNAIRE_STYLE_KEY);
+  const style = getStoredValue(QUESTIONNAIRE_STYLE_KEY);
   if (style && STYLE_LIBRARY[style]) selectedStyleId = style;
 
-  const influenceRaw = localStorage.getItem(QUESTIONNAIRE_INFLUENCES_KEY);
+  const influenceRaw = getStoredValue(QUESTIONNAIRE_INFLUENCES_KEY);
   if (influenceRaw) {
     try {
       const parsed = JSON.parse(influenceRaw) as string[];
@@ -983,7 +1487,7 @@ function restoreQuestionnaireState() {
     }
   }
 
-  const moodRaw = localStorage.getItem(QUESTIONNAIRE_MOODS_KEY);
+  const moodRaw = getStoredValue(QUESTIONNAIRE_MOODS_KEY);
   if (moodRaw) {
     try {
       const parsed = JSON.parse(moodRaw) as string[];
@@ -994,10 +1498,10 @@ function restoreQuestionnaireState() {
     }
   }
 
-  const audience = localStorage.getItem(QUESTIONNAIRE_AUDIENCE_KEY);
+  const audience = getStoredValue(QUESTIONNAIRE_AUDIENCE_KEY);
   if (audience) audienceSelect.value = audience;
 
-  const complexity = localStorage.getItem(QUESTIONNAIRE_COMPLEXITY_KEY);
+  const complexity = getStoredValue(QUESTIONNAIRE_COMPLEXITY_KEY);
   if (complexity) complexitySelect.value = complexity;
 }
 
@@ -1120,6 +1624,7 @@ async function sendChat() {
   }
 
   chatHistory.push({ role: "user", content: text });
+  persistChatHistory();
   chatInput.value = "";
   sendChatBtn.disabled = true;
   setError("");
@@ -1135,11 +1640,7 @@ async function sendChat() {
       ...getResearchPayload(),
     };
 
-    const res = await fetch(getChatBaseUrl() + "/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
+    const res = await postChatWithAutoRecovery(body);
 
     const raw = await res.text();
     let data: ChatResponse | { error?: string };
@@ -1160,6 +1661,7 @@ async function sendChat() {
       ? data.assistant
       : "Done.";
     chatHistory.push({ role: "assistant", content: assistantText });
+    persistChatHistory();
     setAssistantOutput(assistantText);
 
     const toolCalls = "toolCalls" in data && Array.isArray(data.toolCalls) ? data.toolCalls : [];
@@ -1175,6 +1677,7 @@ async function sendChat() {
 
 function clearChat() {
   chatHistory.length = 0;
+  persistChatHistory();
   setAssistantOutput("");
   setChatMeta("Chat cleared.");
 }
@@ -1924,6 +2427,46 @@ connectBtn.addEventListener("click", () => {
 
 providerSelect.addEventListener("change", () => {
   updateProviderUI();
+  setStoredValue(PROVIDER_STORAGE_KEY, providerSelect.value);
+  persistCurrentWorkspaceState();
+});
+
+modelInput.addEventListener("change", () => {
+  setStoredValue(MODEL_STORAGE_KEY, modelInput.value.trim());
+  persistCurrentWorkspaceState();
+});
+
+profileLoginBtn.addEventListener("click", () => {
+  loginOrCreateProfile();
+});
+
+profileLogoutBtn.addEventListener("click", () => {
+  logoutProfile();
+});
+
+profileUseSelectedBtn.addEventListener("click", () => {
+  useSelectedProfile();
+});
+
+profileSelectEl.addEventListener("change", () => {
+  const selected = profileSelectEl.value;
+  if (!selected || !profilesStore[selected]) return;
+  profileUsernameInput.value = profilesStore[selected].username;
+});
+
+profilePasscodeInput.addEventListener("keydown", (event) => {
+  if (event.key === "Enter") {
+    event.preventDefault();
+    loginOrCreateProfile();
+  }
+});
+
+saveChatSnapshotBtn.addEventListener("click", () => {
+  saveChatSnapshot();
+});
+
+loadChatSnapshotBtn.addEventListener("click", () => {
+  loadChatSnapshot();
 });
 
 sendChatBtn.addEventListener("click", () => {
@@ -1958,6 +2501,7 @@ for (const btn of projectTypeBtns) {
     selectedProjectType = value;
     setSingleSelect(projectTypeBtns, selectedProjectType, "projectType");
     applyStyleThemeFromSelections();
+    saveQuestionnaireState();
     setQuestionnaireMeta("Generate to populate the brief automatically.");
   });
 }
@@ -1969,6 +2513,7 @@ for (const btn of styleCards) {
     selectedStyleId = value;
     setSingleSelect(styleCards, selectedStyleId, "styleId");
     applyStyleThemeFromSelections();
+    saveQuestionnaireState();
     setQuestionnaireMeta("Generate to populate the brief automatically.");
   });
 }
@@ -1979,6 +2524,7 @@ for (const btn of influenceBtns) {
     if (!value) return;
     toggleMultiSelect(influenceBtns, selectedInfluences, "influence", value, 3);
     applyStyleThemeFromSelections();
+    saveQuestionnaireState();
   });
 }
 
@@ -1988,6 +2534,7 @@ for (const btn of moodBtns) {
     if (!value) return;
     toggleMultiSelect(moodBtns, selectedMoods, "mood", value, 3);
     applyStyleThemeFromSelections();
+    saveQuestionnaireState();
   });
 }
 
@@ -2001,11 +2548,13 @@ surpriseBriefBtn.addEventListener("click", () => {
 });
 
 audienceSelect.addEventListener("change", () => {
+  saveQuestionnaireState();
   setQuestionnaireMeta("Generate to refresh the brief with updated audience.");
 });
 
 complexitySelect.addEventListener("change", () => {
   applyStyleThemeFromSelections();
+  saveQuestionnaireState();
   setQuestionnaireMeta("Generate to refresh the brief with updated complexity.");
 });
 
@@ -2069,6 +2618,7 @@ for (const btn of textStyleBtns) {
 themeToggleBtn.addEventListener("click", () => {
   const current = document.body.classList.contains("theme-light") ? "light" : "dark";
   applyTheme(current === "light" ? "dark" : "light");
+  persistCurrentWorkspaceState();
 });
 
 sizeDownBtn.addEventListener("click", () => {
@@ -2080,46 +2630,29 @@ sizeUpBtn.addEventListener("click", () => {
 });
 
 apiKeyInput.addEventListener("change", () => {
-  localStorage.setItem(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
+  setStoredValue(API_KEY_STORAGE_KEY, apiKeyInput.value.trim());
 });
 
 researchContextInput.addEventListener("change", () => {
-  localStorage.setItem(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
+  setStoredValue(RESEARCH_CONTEXT_STORAGE_KEY, researchContextInput.value);
 });
 
 designProfileInput.addEventListener("change", () => {
-  localStorage.setItem(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
+  setStoredValue(DESIGN_PROFILE_STORAGE_KEY, designProfileInput.value);
 });
 
-const storedTheme = localStorage.getItem(THEME_STORAGE_KEY);
-applyTheme(storedTheme === "light" ? "light" : "dark");
-
-const storedScale = Number(localStorage.getItem(UI_SCALE_STORAGE_KEY));
-uiScale = Number.isFinite(storedScale) ? normalizeScale(storedScale) : MIN_UI_SCALE;
-setUiScaleLabel(uiScale);
-void applyUiScale(uiScale);
-
-const storedApiKey = localStorage.getItem(API_KEY_STORAGE_KEY);
-if (storedApiKey) apiKeyInput.value = storedApiKey;
-
-applyQuestionnaireDefaults();
-
-const storedResearch = localStorage.getItem(RESEARCH_CONTEXT_STORAGE_KEY);
-if (storedResearch) researchContextInput.value = storedResearch;
-
-const storedProfile = localStorage.getItem(DESIGN_PROFILE_STORAGE_KEY);
-designProfileInput.value = storedProfile && storedProfile.trim() ? storedProfile : defaultDesignProfile;
-researchFieldsEl.classList.add("hidden");
-
-const storedMainFrameId = localStorage.getItem(MAIN_FRAME_ID_STORAGE_KEY);
-const storedMainFrameName = localStorage.getItem(MAIN_FRAME_NAME_STORAGE_KEY);
-if (storedMainFrameId && storedMainFrameName) {
-  mainFrameId = storedMainFrameId;
-  mainFrameName = storedMainFrameName;
+loadProfilesStore();
+refreshProfileSelect();
+const rememberedProfileId = localStorage.getItem(ACTIVE_PROFILE_STORAGE_KEY);
+if (rememberedProfileId && profilesStore[rememberedProfileId]) {
+  setActiveProfile(rememberedProfileId);
+  profileUsernameInput.value = profilesStore[rememberedProfileId].username;
+  setProfileMeta(`Signed in as ${profilesStore[rememberedProfileId].username}.`);
+} else {
+  setActiveProfile("");
+  setProfileMeta("Guest mode active. Login to save style preferences and chats per profile.");
 }
-updateMainFrameLabel();
 
-updateProviderUI();
+applyStoredWorkspaceState();
 setQuestionnaireMeta("Generate to populate the brief automatically.");
-setAssistantOutput("CursorCanvas ready. Connect, then chat to generate designs directly on canvas.");
 setLibraryMeta("Create or select a main frame, then insert templates in a clean vertical stack.");

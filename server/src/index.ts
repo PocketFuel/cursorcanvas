@@ -362,97 +362,593 @@ async function runTool(tool: string, params: JsonObject): Promise<unknown> {
   return sendToPlugin(id, tool, params);
 }
 
+function extractNodeId(result: unknown): string | null {
+  if (!result || typeof result !== "object") return null;
+  const maybeId = (result as { id?: unknown }).id;
+  return typeof maybeId === "string" ? maybeId : null;
+}
+
 async function runLocalAgent(
   message: string,
   researchContext: string,
   designProfile: string
 ): Promise<{ assistant: string; toolCalls: ExecutedToolCall[] }> {
   const blended = `${message}\n${researchContext}\n${designProfile}`.toLowerCase();
-  const plannedCalls: Array<{ tool: string; params: JsonObject }> = [];
-
-  if (blended.includes("landing")) {
-    plannedCalls.push({
-      tool: "create_frame",
-      params: {
-        name: "Landing Page",
-        width: 1440,
-        height: 980,
-        layoutMode: "VERTICAL",
-        itemSpacing: 24,
-        paddingTop: 40,
-        paddingRight: 40,
-        paddingBottom: 40,
-        paddingLeft: 40,
-      },
-    });
-    plannedCalls.push({
-      tool: "create_text",
-      params: { text: "Headline", fontSize: 56, fillR: 0.1, fillG: 0.1, fillB: 0.1 },
-    });
-  } else if (blended.includes("button")) {
-    plannedCalls.push({
-      tool: "create_component",
-      params: {
-        name: "Button / Primary",
-        width: 180,
-        height: 52,
-        cornerRadius: 12,
-        fillR: 0.2,
-        fillG: 0.2,
-        fillB: 0.2,
-      },
-    });
-  } else if (blended.includes("circle") || blended.includes("ellipse")) {
-    plannedCalls.push({
-      tool: "create_ellipse",
-      params: {
-        name: "Circle",
-        width: 140,
-        height: 140,
-        fillR: 0.25,
-        fillG: 0.25,
-        fillB: 0.25,
-      },
-    });
-  } else if (blended.includes("card")) {
-    plannedCalls.push({
-      tool: "create_rectangle",
-      params: {
-        name: "Card",
-        width: 360,
-        height: 220,
-        cornerRadius: 16,
-        fillR: 0.95,
-        fillG: 0.95,
-        fillB: 0.95,
-      },
-    });
-  } else {
-    plannedCalls.push({
-      tool: "create_frame",
-      params: { name: "Canvas", width: 1200, height: 900, layoutMode: "VERTICAL", itemSpacing: 16 },
-    });
-    plannedCalls.push({
-      tool: "create_text",
-      params: { text: message, fontSize: 20, fillR: 0.1, fillG: 0.1, fillB: 0.1 },
-    });
-  }
-
   const toolCalls: ExecutedToolCall[] = [];
-  for (const call of plannedCalls) {
+  const run = async (tool: string, params: JsonObject): Promise<unknown | null> => {
     try {
-      const result = await runTool(call.tool, call.params);
-      toolCalls.push({ tool: call.tool, params: call.params, result });
+      const result = await runTool(tool, params);
+      toolCalls.push({ tool, params, result });
+      return result;
     } catch (err) {
       const messageText = err instanceof Error ? err.message : String(err);
-      toolCalls.push({ tool: call.tool, params: call.params, error: messageText });
+      toolCalls.push({ tool, params, error: messageText });
+      return null;
     }
+  };
+
+  const isMobile = blended.includes("mobile");
+  const isTablet = blended.includes("tablet");
+  const isDashboard = blended.includes("dashboard") || blended.includes("admin") || blended.includes("app");
+
+  const canvasWidth = isMobile ? 390 : isTablet ? 834 : 1366;
+  const canvasHeight = isMobile ? 844 : isTablet ? 1194 : 900;
+  const canvasPadding = isMobile ? 20 : 32;
+  const contentWidth = Math.max(280, canvasWidth - canvasPadding * 2);
+
+  const rootResult = await run("create_frame", {
+    name: isDashboard ? "App Shell Canvas" : "Landing Canvas",
+    width: canvasWidth,
+    height: canvasHeight,
+    layoutMode: "VERTICAL",
+    primaryAxisSizingMode: "FIXED",
+    counterAxisSizingMode: "FIXED",
+    itemSpacing: 20,
+    paddingTop: canvasPadding,
+    paddingRight: canvasPadding,
+    paddingBottom: canvasPadding,
+    paddingLeft: canvasPadding,
+    fillR: 0.985,
+    fillG: 0.987,
+    fillB: 0.992,
+    select: false,
+  });
+  const rootId = extractNodeId(rootResult);
+
+  if (!rootId) {
+    return { assistant: "Local agent could not initialize a root frame in Figma.", toolCalls };
+  }
+
+  if (blended.includes("button") && !isDashboard && !blended.includes("page")) {
+    const section = await run("create_frame", {
+      parentId: rootId,
+      name: "Button Showcase",
+      width: contentWidth,
+      height: 260,
+      layoutMode: "VERTICAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 14,
+      paddingTop: 18,
+      paddingRight: 18,
+      paddingBottom: 18,
+      paddingLeft: 18,
+      fillR: 0.952,
+      fillG: 0.957,
+      fillB: 0.969,
+      cornerRadius: 14,
+      select: false,
+    });
+    const sectionId = extractNodeId(section) ?? rootId;
+    await run("create_text", {
+      parentId: sectionId,
+      text: "Button Variants",
+      fontFamily: "Inter",
+      fontStyle: "Bold",
+      fontSize: 28,
+      fillR: 0.11,
+      fillG: 0.12,
+      fillB: 0.16,
+      select: false,
+    });
+    const row = await run("create_frame", {
+      parentId: sectionId,
+      name: "Button Row",
+      width: Math.max(260, contentWidth - 36),
+      height: 72,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      itemSpacing: 10,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      fillOpacity: 0,
+      select: false,
+    });
+    const rowId = extractNodeId(row) ?? sectionId;
+    const primary = await run("create_component", {
+      parentId: rowId,
+      name: "Button / Primary",
+      width: 170,
+      height: 48,
+      cornerRadius: 9,
+      fillR: 0.26,
+      fillG: 0.31,
+      fillB: 0.9,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      primaryAxisAlignItems: "CENTER",
+      counterAxisAlignItems: "CENTER",
+      paddingTop: 12,
+      paddingRight: 18,
+      paddingBottom: 12,
+      paddingLeft: 18,
+      select: false,
+    });
+    const primaryId = extractNodeId(primary) ?? rowId;
+    await run("create_text", {
+      parentId: primaryId,
+      text: "Primary Action",
+      fontFamily: "Inter",
+      fontStyle: "Medium",
+      fontSize: 14,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      select: false,
+    });
+    const secondary = await run("create_component", {
+      parentId: rowId,
+      name: "Button / Secondary",
+      width: 170,
+      height: 48,
+      cornerRadius: 9,
+      fillR: 0.89,
+      fillG: 0.91,
+      fillB: 0.95,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      primaryAxisAlignItems: "CENTER",
+      counterAxisAlignItems: "CENTER",
+      paddingTop: 12,
+      paddingRight: 18,
+      paddingBottom: 12,
+      paddingLeft: 18,
+      select: false,
+    });
+    const secondaryId = extractNodeId(secondary) ?? rowId;
+    await run("create_text", {
+      parentId: secondaryId,
+      text: "Secondary Action",
+      fontFamily: "Inter",
+      fontStyle: "Medium",
+      fontSize: 14,
+      fillR: 0.15,
+      fillG: 0.17,
+      fillB: 0.24,
+      select: true,
+    });
+  } else if (isDashboard) {
+    const shell = await run("create_frame", {
+      parentId: rootId,
+      name: "Dashboard Shell",
+      width: contentWidth,
+      height: isMobile ? 720 : 760,
+      layoutMode: isMobile ? "VERTICAL" : "HORIZONTAL",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 14,
+      paddingTop: 14,
+      paddingRight: 14,
+      paddingBottom: 14,
+      paddingLeft: 14,
+      fillR: 0.968,
+      fillG: 0.972,
+      fillB: 0.982,
+      cornerRadius: 14,
+      select: false,
+    });
+    const shellId = extractNodeId(shell) ?? rootId;
+    const sidebarWidth = isMobile ? Math.max(280, contentWidth - 28) : Math.max(220, Math.round(contentWidth * 0.24));
+    const sidebar = await run("create_frame", {
+      parentId: shellId,
+      name: "Sidebar",
+      width: sidebarWidth,
+      height: isMobile ? 220 : 720,
+      layoutMode: "VERTICAL",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 8,
+      paddingTop: 16,
+      paddingRight: 16,
+      paddingBottom: 16,
+      paddingLeft: 16,
+      fillR: 0.918,
+      fillG: 0.929,
+      fillB: 0.956,
+      cornerRadius: 12,
+      select: false,
+    });
+    const sidebarId = extractNodeId(sidebar) ?? shellId;
+    for (const label of ["Workspace", "Overview", "Projects", "Library", "Settings"] as const) {
+      await run("create_text", {
+        parentId: sidebarId,
+        text: label,
+        fontFamily: "Inter",
+        fontStyle: label === "Workspace" ? "Bold" : "Medium",
+        fontSize: label === "Workspace" ? 16 : 13,
+        fillR: label === "Workspace" ? 0.13 : 0.31,
+        fillG: label === "Workspace" ? 0.15 : 0.34,
+        fillB: label === "Workspace" ? 0.2 : 0.43,
+        select: false,
+      });
+    }
+
+    const content = await run("create_frame", {
+      parentId: shellId,
+      name: "Content",
+      width: isMobile ? Math.max(280, contentWidth - 28) : Math.max(340, contentWidth - sidebarWidth - 14),
+      height: isMobile ? 460 : 720,
+      layoutMode: "VERTICAL",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 12,
+      paddingTop: 16,
+      paddingRight: 16,
+      paddingBottom: 16,
+      paddingLeft: 16,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      cornerRadius: 12,
+      select: false,
+    });
+    const contentId = extractNodeId(content) ?? shellId;
+    await run("create_text", {
+      parentId: contentId,
+      text: "Dashboard Overview",
+      fontFamily: "Inter",
+      fontStyle: "Bold",
+      fontSize: 30,
+      fillR: 0.11,
+      fillG: 0.12,
+      fillB: 0.17,
+      select: false,
+    });
+    await run("create_text", {
+      parentId: contentId,
+      text: "Clear hierarchy with production-ready spacing and card primitives.",
+      fontFamily: "Inter",
+      fontStyle: "Regular",
+      fontSize: 15,
+      fillR: 0.35,
+      fillG: 0.38,
+      fillB: 0.49,
+      select: false,
+    });
+    const stats = await run("create_frame", {
+      parentId: contentId,
+      name: "Stats",
+      width: Math.max(300, contentWidth - sidebarWidth - 62),
+      height: 116,
+      layoutMode: isMobile ? "VERTICAL" : "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 10,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      fillOpacity: 0,
+      select: false,
+    });
+    const statsId = extractNodeId(stats) ?? contentId;
+    for (const metric of ["Active boards", "Design tokens", "Open reviews"] as const) {
+      const card = await run("create_component", {
+        parentId: statsId,
+        name: `Metric / ${metric}`,
+        width: isMobile ? Math.max(260, contentWidth - 62) : 170,
+        height: 98,
+        cornerRadius: 11,
+        fillR: 0.935,
+        fillG: 0.944,
+        fillB: 0.97,
+        layoutMode: "VERTICAL",
+        primaryAxisSizingMode: "AUTO",
+        counterAxisSizingMode: "FIXED",
+        itemSpacing: 6,
+        paddingTop: 14,
+        paddingRight: 14,
+        paddingBottom: 14,
+        paddingLeft: 14,
+        select: false,
+      });
+      const cardId = extractNodeId(card) ?? statsId;
+      await run("create_text", {
+        parentId: cardId,
+        text: metric,
+        fontFamily: "Inter",
+        fontStyle: "Medium",
+        fontSize: 12,
+        fillR: 0.35,
+        fillG: 0.38,
+        fillB: 0.49,
+        select: false,
+      });
+      await run("create_text", {
+        parentId: cardId,
+        text: metric === "Active boards" ? "42" : metric === "Design tokens" ? "128" : "9",
+        fontFamily: "Inter",
+        fontStyle: "Bold",
+        fontSize: 28,
+        fillR: 0.12,
+        fillG: 0.14,
+        fillB: 0.2,
+        select: false,
+      });
+    }
+    await run("create_rectangle", {
+      parentId: contentId,
+      name: "Chart Placeholder",
+      width: Math.max(300, contentWidth - sidebarWidth - 62),
+      height: 260,
+      cornerRadius: 12,
+      fillR: 0.93,
+      fillG: 0.945,
+      fillB: 0.985,
+      select: true,
+    });
+  } else {
+    const nav = await run("create_frame", {
+      parentId: rootId,
+      name: "Navbar",
+      width: contentWidth,
+      height: 72,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+      primaryAxisAlignItems: "SPACE_BETWEEN",
+      counterAxisAlignItems: "CENTER",
+      paddingTop: 14,
+      paddingRight: 18,
+      paddingBottom: 14,
+      paddingLeft: 18,
+      fillR: 0.94,
+      fillG: 0.95,
+      fillB: 0.97,
+      cornerRadius: 12,
+      select: false,
+    });
+    const navId = extractNodeId(nav) ?? rootId;
+    await run("create_text", {
+      parentId: navId,
+      text: "CursorCanvas",
+      fontFamily: "Inter",
+      fontStyle: "Bold",
+      fontSize: 20,
+      fillR: 0.12,
+      fillG: 0.13,
+      fillB: 0.18,
+      select: false,
+    });
+    await run("create_text", {
+      parentId: navId,
+      text: "Docs   Pricing   Login",
+      fontFamily: "Inter",
+      fontStyle: "Medium",
+      fontSize: 13,
+      fillR: 0.35,
+      fillG: 0.39,
+      fillB: 0.5,
+      select: false,
+    });
+
+    const hero = await run("create_frame", {
+      parentId: rootId,
+      name: "Hero",
+      width: contentWidth,
+      height: isMobile ? 360 : 420,
+      layoutMode: "VERTICAL",
+      primaryAxisSizingMode: "FIXED",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 14,
+      paddingTop: isMobile ? 24 : 34,
+      paddingRight: isMobile ? 22 : 30,
+      paddingBottom: isMobile ? 24 : 34,
+      paddingLeft: isMobile ? 22 : 30,
+      fillR: 0.93,
+      fillG: 0.944,
+      fillB: 0.982,
+      cornerRadius: 16,
+      select: false,
+    });
+    const heroId = extractNodeId(hero) ?? rootId;
+    await run("create_text", {
+      parentId: heroId,
+      text: "Design polished interfaces in one pass",
+      fontFamily: "Inter",
+      fontStyle: "Bold",
+      fontSize: isMobile ? 36 : 56,
+      fillR: 0.09,
+      fillG: 0.1,
+      fillB: 0.14,
+      select: false,
+    });
+    await run("create_text", {
+      parentId: heroId,
+      text: "Frame-first structure, clean spacing rhythm, and reusable components ready for handoff.",
+      fontFamily: "Inter",
+      fontStyle: "Regular",
+      fontSize: isMobile ? 15 : 18,
+      fillR: 0.32,
+      fillG: 0.35,
+      fillB: 0.45,
+      select: false,
+    });
+    const ctaRow = await run("create_frame", {
+      parentId: heroId,
+      name: "CTA",
+      width: Math.max(240, contentWidth - 60),
+      height: 58,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      itemSpacing: 10,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      fillOpacity: 0,
+      select: false,
+    });
+    const ctaRowId = extractNodeId(ctaRow) ?? heroId;
+    const primary = await run("create_component", {
+      parentId: ctaRowId,
+      name: "Button / Primary",
+      width: 170,
+      height: 48,
+      cornerRadius: 9,
+      fillR: 0.25,
+      fillG: 0.31,
+      fillB: 0.9,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      primaryAxisAlignItems: "CENTER",
+      counterAxisAlignItems: "CENTER",
+      paddingTop: 12,
+      paddingRight: 18,
+      paddingBottom: 12,
+      paddingLeft: 18,
+      select: false,
+    });
+    const primaryId = extractNodeId(primary) ?? ctaRowId;
+    await run("create_text", {
+      parentId: primaryId,
+      text: "Start Designing",
+      fontFamily: "Inter",
+      fontStyle: "Medium",
+      fontSize: 14,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      select: false,
+    });
+    const secondary = await run("create_component", {
+      parentId: ctaRowId,
+      name: "Button / Secondary",
+      width: 160,
+      height: 48,
+      cornerRadius: 9,
+      fillR: 0.885,
+      fillG: 0.9,
+      fillB: 0.94,
+      layoutMode: "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "AUTO",
+      primaryAxisAlignItems: "CENTER",
+      counterAxisAlignItems: "CENTER",
+      paddingTop: 12,
+      paddingRight: 18,
+      paddingBottom: 12,
+      paddingLeft: 18,
+      select: false,
+    });
+    const secondaryId = extractNodeId(secondary) ?? ctaRowId;
+    await run("create_text", {
+      parentId: secondaryId,
+      text: "View Components",
+      fontFamily: "Inter",
+      fontStyle: "Medium",
+      fontSize: 14,
+      fillR: 0.16,
+      fillG: 0.18,
+      fillB: 0.26,
+      select: false,
+    });
+
+    const featureRow = await run("create_frame", {
+      parentId: rootId,
+      name: "Feature Cards",
+      width: contentWidth,
+      height: 170,
+      layoutMode: isMobile ? "VERTICAL" : "HORIZONTAL",
+      primaryAxisSizingMode: "AUTO",
+      counterAxisSizingMode: "FIXED",
+      itemSpacing: 10,
+      fillR: 1,
+      fillG: 1,
+      fillB: 1,
+      fillOpacity: 0,
+      select: false,
+    });
+    const featureRowId = extractNodeId(featureRow) ?? rootId;
+    for (const item of [
+      { title: "Auto Layout First", body: "Generated comps stay editable and structured." },
+      { title: "Token Driven", body: "Neutral base + semantic accent keeps themes stable." },
+      { title: "Handoff Ready", body: "Production-friendly hierarchy and spacing rhythm." },
+    ] as const) {
+      const card = await run("create_component", {
+        parentId: featureRowId,
+        name: `Feature / ${item.title}`,
+        width: isMobile ? Math.max(250, contentWidth) : Math.max(220, Math.floor((contentWidth - 20) / 3)),
+        height: 160,
+        cornerRadius: 12,
+        fillR: 0.955,
+        fillG: 0.963,
+        fillB: 0.982,
+        layoutMode: "VERTICAL",
+        primaryAxisSizingMode: "AUTO",
+        counterAxisSizingMode: "FIXED",
+        itemSpacing: 8,
+        paddingTop: 16,
+        paddingRight: 16,
+        paddingBottom: 16,
+        paddingLeft: 16,
+        select: false,
+      });
+      const cardId = extractNodeId(card) ?? featureRowId;
+      await run("create_text", {
+        parentId: cardId,
+        text: item.title,
+        fontFamily: "Inter",
+        fontStyle: "Bold",
+        fontSize: 19,
+        fillR: 0.14,
+        fillG: 0.16,
+        fillB: 0.22,
+        select: false,
+      });
+      await run("create_text", {
+        parentId: cardId,
+        text: item.body,
+        fontFamily: "Inter",
+        fontStyle: "Regular",
+        fontSize: 14,
+        fillR: 0.35,
+        fillG: 0.39,
+        fillB: 0.5,
+        select: false,
+      });
+    }
+    await run("create_text", {
+      parentId: rootId,
+      text: `Prompt: ${message.slice(0, 140)}`,
+      fontFamily: "Inter",
+      fontStyle: "Regular",
+      fontSize: 12,
+      fillR: 0.42,
+      fillG: 0.46,
+      fillB: 0.58,
+      select: true,
+    });
   }
 
   const successCount = toolCalls.filter((c) => c.error == null).length;
   const failCount = toolCalls.length - successCount;
   const assistant = failCount === 0
-    ? `Local agent executed ${successCount} Figma action${successCount !== 1 ? "s" : ""}. A/B/C variant notes are ready for review in chat follow-up.`
+    ? `Local agent generated a structured layout with ${successCount} Figma actions. Review and iterate from this frame-first starting point.`
     : `Local agent executed ${successCount} action(s) with ${failCount} error(s).`;
 
   return { assistant, toolCalls };

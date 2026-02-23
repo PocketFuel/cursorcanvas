@@ -105,10 +105,10 @@ function pickParent(): BaseNode & ChildrenMixin {
   return figma.currentPage;
 }
 
-function resolveParentNode(params: Record<string, unknown>): BaseNode & ChildrenMixin {
+async function resolveParentNode(params: Record<string, unknown>): Promise<BaseNode & ChildrenMixin> {
   const parentId = stringParam(params, "parentId");
   if (parentId) {
-    const target = figma.getNodeById(parentId);
+    const target = await figma.getNodeByIdAsync(parentId);
     if (!isParentNode(target)) {
       throw new Error(`Invalid parentId: ${parentId}`);
     }
@@ -117,8 +117,8 @@ function resolveParentNode(params: Record<string, unknown>): BaseNode & Children
   return pickParent();
 }
 
-function appendAndFocus<T extends SceneNode>(node: T, params: Record<string, unknown>): T {
-  const parent = resolveParentNode(params);
+async function appendAndFocus<T extends SceneNode>(node: T, params: Record<string, unknown>): Promise<T> {
+  const parent = await resolveParentNode(params);
   parent.appendChild(node);
   const shouldSelect = booleanParam(params, "select") ?? true;
   if (shouldSelect) {
@@ -128,10 +128,10 @@ function appendAndFocus<T extends SceneNode>(node: T, params: Record<string, unk
   return node;
 }
 
-function resolveTargetNode(params: Record<string, unknown>): SceneNode {
+async function resolveTargetNode(params: Record<string, unknown>): Promise<SceneNode> {
   const nodeId = stringParam(params, "nodeId");
   if (nodeId) {
-    const node = figma.getNodeById(nodeId);
+    const node = await figma.getNodeByIdAsync(nodeId);
     if (isSceneNode(node)) return node;
     throw new Error(`Node not found for id ${nodeId}`);
   }
@@ -243,7 +243,7 @@ async function handleCommand(
       let created = false;
 
       if (frameId) {
-        const existing = figma.getNodeById(frameId);
+        const existing = await figma.getNodeByIdAsync(frameId);
         if (existing?.type === "FRAME") {
           frame = existing;
         }
@@ -302,7 +302,7 @@ async function handleCommand(
       if (cornerRadius != null) frame.cornerRadius = cornerRadius;
 
       applyAutoLayoutSettings(frame, params);
-      appendAndFocus(frame, params);
+      await appendAndFocus(frame, params);
       return { id: frame.id, name: frame.name };
     }
 
@@ -323,7 +323,7 @@ async function handleCommand(
       if (cornerRadius != null) component.cornerRadius = cornerRadius;
 
       applyAutoLayoutSettings(component, params);
-      appendAndFocus(component, params);
+      await appendAndFocus(component, params);
       return { id: component.id, name: component.name };
     }
 
@@ -359,7 +359,7 @@ async function handleCommand(
         setNodeFill(text, fill, opacity);
       }
 
-      appendAndFocus(text, params);
+      await appendAndFocus(text, params);
       return { id: text.id, characters: text.characters };
     }
 
@@ -379,7 +379,7 @@ async function handleCommand(
       const cornerRadius = numberParam(params, "cornerRadius");
       if (cornerRadius != null) rect.cornerRadius = cornerRadius;
 
-      appendAndFocus(rect, params);
+      await appendAndFocus(rect, params);
       return { id: rect.id, name: rect.name };
     }
 
@@ -396,7 +396,7 @@ async function handleCommand(
         setNodeFill(ellipse, fill, opacity);
       }
 
-      appendAndFocus(ellipse, params);
+      await appendAndFocus(ellipse, params);
       return { id: ellipse.id, name: ellipse.name };
     }
 
@@ -418,7 +418,7 @@ async function handleCommand(
       const rotation = numberParam(params, "rotation");
       if (rotation != null) line.rotation = rotation;
 
-      appendAndFocus(line, params);
+      await appendAndFocus(line, params);
       return { id: line.id, name: line.name };
     }
 
@@ -449,7 +449,7 @@ async function handleCommand(
         setNodeFill(polygon, fill, opacity);
       }
 
-      appendAndFocus(polygon, params);
+      await appendAndFocus(polygon, params);
       return { id: polygon.id, name: polygon.name, sides: polygon.pointCount };
     }
 
@@ -480,12 +480,12 @@ async function handleCommand(
         setNodeFill(star, fill, opacity);
       }
 
-      appendAndFocus(star, params);
+      await appendAndFocus(star, params);
       return { id: star.id, name: star.name, points: star.pointCount };
     }
 
     case "set_auto_layout": {
-      const node = resolveTargetNode(params);
+      const node = await resolveTargetNode(params);
       if (!isAutoLayoutNode(node)) {
         throw new Error("Target node must be a frame or component for auto-layout.");
       }
@@ -496,7 +496,7 @@ async function handleCommand(
     }
 
     case "set_fill_color": {
-      const node = resolveTargetNode(params);
+      const node = await resolveTargetNode(params);
       if (!isFillableNode(node)) {
         throw new Error("Target node does not support fill color.");
       }
@@ -509,7 +509,7 @@ async function handleCommand(
     }
 
     case "set_corner_radius": {
-      const node = resolveTargetNode(params);
+      const node = await resolveTargetNode(params);
       if (!isCornerRadiusNode(node)) {
         throw new Error("Target node does not support corner radius.");
       }
